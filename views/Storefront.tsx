@@ -88,12 +88,25 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
 
     const now = new Date().toLocaleString();
     
-    // Create lead for the main product
+    // Split name into first and last for Lead interface requirements
+    const nameParts = customer.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    // Create lead for the main product with all required Lead properties
     const newLead: Lead = {
       id: 'lead_' + Math.random().toString(36).substr(2, 9),
       id_num: '#' + (Math.floor(Math.random() * 9000) + 1000),
       name: customer.name,
+      firstName: firstName,
+      lastName: lastName,
+      email: '',
       phone: customer.phone,
+      preferredContact: 'phone',
+      company: '',
+      country: '',
+      region: '',
+      city: '',
       product_id: productId!,
       status: LeadStatus.NEW,
       createdAt: now,

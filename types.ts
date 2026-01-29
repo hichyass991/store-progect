@@ -68,8 +68,16 @@ export interface Product {
 export interface Lead {
   id: string;
   id_num: string;
-  name: string;
+  name: string; // Composite: firstName + lastName
+  firstName: string;
+  lastName: string;
+  email: string;
   phone: string;
+  preferredContact: 'phone' | 'email' | 'both';
+  company: string;
+  country: string;
+  region: string;
+  city: string;
   product_id: string;
   status: LeadStatus;
   createdAt: string;
