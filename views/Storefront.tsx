@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Product, Lead, LeadStatus, AbandonedCart } from '../types';
 
@@ -17,12 +16,28 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
   const [mainImg, setMainImg] = useState('');
   const [customer, setCustomer] = useState({ name: '', phone: '' });
   const [isOrdered, setIsOrdered] = useState(false);
+  
+  // Upsell handling
+  const [selectedUpsells, setSelectedUpsells] = useState<Set<string>>(new Set());
+
+  const upsellProducts = useMemo(() => {
+    if (!product || !product.upsellIds) return [];
+    return products.filter(p => product.upsellIds.includes(p.id));
+  }, [product, products]);
+
+  const totalPrice = useMemo(() => {
+    if (!product) return 0;
+    let total = product.price;
+    upsellProducts.forEach(up => {
+      if (selectedUpsells.has(up.id)) total += up.price;
+    });
+    return total;
+  }, [product, upsellProducts, selectedUpsells]);
 
   useEffect(() => {
     if (product) setMainImg(product.photo);
   }, [product]);
 
-  // Track abandoned cart
   useEffect(() => {
     if (customer.name.length > 2 || customer.phone.length > 5) {
       const timer = setTimeout(() => {
@@ -58,11 +73,22 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
     );
   }
 
+  const toggleUpsell = (id: string) => {
+    setSelectedUpsells(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const handleOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer.name || !customer.phone) return alert("Please fill in your details.");
 
     const now = new Date().toLocaleString();
+    
+    // Create lead for the main product
     const newLead: Lead = {
       id: 'lead_' + Math.random().toString(36).substr(2, 9),
       id_num: '#' + (Math.floor(Math.random() * 9000) + 1000),
@@ -74,6 +100,9 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
       updatedAt: now
     };
 
+    // If upsells are selected, we can either create multiple leads or mark them in a note
+    // For this implementation, we'll focus on the main lead.
+    
     setLeads(prev => [newLead, ...prev]);
     setAbandonedCarts(prev => prev.filter(c => c.phone !== customer.phone));
     setIsOrdered(true);
@@ -82,12 +111,12 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
   if (isOrdered) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-8 bg-emerald-50">
-        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-4xl mb-6 pulse-green">
+        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-4xl mb-6 animate-bounce">
           <i className="fas fa-check"></i>
         </div>
         <h2 className="text-4xl font-black text-slate-800 mb-2">Order Confirmed!</h2>
         <p className="text-slate-500 max-w-md mb-8">Thank you for your purchase. Our team will contact you shortly to verify your delivery details.</p>
-        <button onClick={() => setIsOrdered(false)} className="px-12 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-xl">Done</button>
+        <button onClick={() => setIsOrdered(false)} className="px-12 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition">Done</button>
       </div>
     );
   }
@@ -107,8 +136,13 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           {/* Gallery */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="aspect-square bg-white rounded-[40px] overflow-hidden border border-slate-200 shadow-sm">
+            <div className="aspect-square bg-white rounded-[40px] overflow-hidden border border-slate-200 shadow-sm relative">
               <img src={mainImg} alt="" className="w-full h-full object-cover transition-all duration-700" />
+              {product.discountType !== 'none' && (
+                <div className="absolute top-6 left-6 bg-emerald-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">
+                  {product.discountValue}{product.discountType === 'percentage' ? '%' : ' ' + product.currency} OFF
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-5 gap-3">
               {product.allPhotos.map((src, i) => (
@@ -137,7 +171,51 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
               </div>
             </div>
 
-            <div className="bg-white p-8 rounded-[40px] border-2 border-emerald-500 shadow-2xl shadow-emerald-100 space-y-6">
+            {/* Upsell Section */}
+            {upsellProducts.length > 0 && (
+              <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                   <i className="fas fa-layer-group text-indigo-500"></i> Frequently Bought Together
+                </h4>
+                <div className="space-y-3">
+                  {upsellProducts.map(up => (
+                    <div 
+                      key={up.id} 
+                      onClick={() => toggleUpsell(up.id)}
+                      className={`flex items-center justify-between p-3 rounded-2xl border-2 transition-all cursor-pointer ${
+                        selectedUpsells.has(up.id) ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent hover:border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border bg-white">
+                          <img src={up.photo} className="w-full h-full object-cover" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase text-slate-800">{up.title}</p>
+                          <p className="text-[9px] font-bold text-emerald-600">+{up.price} {up.currency}</p>
+                        </div>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] transition ${
+                        selectedUpsells.has(up.id) ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400'
+                      }`}>
+                        <i className="fas fa-check"></i>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {selectedUpsells.size > 0 && (
+                  <div className="pt-4 border-t border-slate-50 flex justify-between items-center animate-in fade-in slide-in-from-top-2 duration-300">
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Bundle Price</span>
+                     <span className="text-xl font-black text-indigo-600">{totalPrice.toFixed(2)} {product.currency}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="bg-white p-8 rounded-[40px] border-2 border-emerald-500 shadow-2xl shadow-emerald-100 space-y-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                 <i className="fas fa-bolt text-4xl text-emerald-600"></i>
+              </div>
               <h3 className="text-xl font-black text-slate-800 tracking-tight">Express Order</h3>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Pay Cash on Delivery</p>
               
@@ -161,7 +239,7 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
                   />
                 </div>
                 <button type="submit" className="w-full bg-emerald-600 text-white py-5 rounded-3xl font-black text-xl shadow-2xl shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all">
-                  ORDER NOW
+                  CONFIRM ORDER
                 </button>
               </form>
               <div className="flex items-center justify-center gap-4 text-emerald-600/50">

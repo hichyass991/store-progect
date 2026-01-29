@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -12,7 +11,9 @@ import Stores from './views/Stores';
 import StoreDesigner from './views/StoreDesigner';
 import Storefront from './views/Storefront';
 import StoreHome from './views/StoreHome';
-import { Product, Lead, AbandonedCart, Store } from './types';
+import Categories from './views/Categories';
+import Discounts from './views/Discounts';
+import { Product, Lead, AbandonedCart, Store, Category, Discount } from './types';
 
 const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => {
@@ -35,21 +36,25 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  useEffect(() => {
-    localStorage.setItem('gwapa_products', JSON.stringify(products));
-  }, [products]);
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const saved = localStorage.getItem('gwapa_categories');
+    return saved ? JSON.parse(saved) : [
+      { id: 'cat_1', name: 'Electronics', description: 'Modern gadgets and tech.', icon: 'fa-laptop', createdAt: new Date().toLocaleDateString() },
+      { id: 'cat_2', name: 'Fashion', description: 'Apparel and accessories.', icon: 'fa-shirt', createdAt: new Date().toLocaleDateString() }
+    ];
+  });
 
-  useEffect(() => {
-    localStorage.setItem('gwapa_leads', JSON.stringify(leads));
-  }, [leads]);
+  const [discounts, setDiscounts] = useState<Discount[]>(() => {
+    const saved = localStorage.getItem('gwapa_discounts');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  useEffect(() => {
-    localStorage.setItem('gwapa_abandoned', JSON.stringify(abandonedCarts));
-  }, [abandonedCarts]);
-
-  useEffect(() => {
-    localStorage.setItem('gwapa_stores', JSON.stringify(stores));
-  }, [stores]);
+  useEffect(() => { localStorage.setItem('gwapa_products', JSON.stringify(products)); }, [products]);
+  useEffect(() => { localStorage.setItem('gwapa_leads', JSON.stringify(leads)); }, [leads]);
+  useEffect(() => { localStorage.setItem('gwapa_abandoned', JSON.stringify(abandonedCarts)); }, [abandonedCarts]);
+  useEffect(() => { localStorage.setItem('gwapa_stores', JSON.stringify(stores)); }, [stores]);
+  useEffect(() => { localStorage.setItem('gwapa_categories', JSON.stringify(categories)); }, [categories]);
+  useEffect(() => { localStorage.setItem('gwapa_discounts', JSON.stringify(discounts)); }, [discounts]);
 
   return (
     <HashRouter>
@@ -68,6 +73,8 @@ const App: React.FC = () => {
           <Route path="/products" element={<Products products={products} setProducts={setProducts} />} />
           <Route path="/products/new" element={<ProductFormView products={products} setProducts={setProducts} />} />
           <Route path="/products/edit/:id" element={<ProductFormView products={products} setProducts={setProducts} />} />
+          <Route path="/categories" element={<Categories categories={categories} setCategories={setCategories} />} />
+          <Route path="/discounts" element={<Discounts discounts={discounts} setDiscounts={setDiscounts} products={products} />} />
           <Route path="/stores" element={<Stores stores={stores} setStores={setStores} />} />
           <Route path="/stores/design/:id" element={<StoreDesigner stores={stores} setStores={setStores} products={products} />} />
         </Route>

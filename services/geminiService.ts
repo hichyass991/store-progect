@@ -1,11 +1,35 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Fix: Initializing GoogleGenAI with API_KEY from environment variables directly
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
+/**
+ * Gwapashop Strategic Intelligence Service
+ * Handles AI-powered features across the platform.
+ */
 export const geminiService = {
+  /**
+   * Performs deep strategic reasoning on complex queries.
+   */
+  async performDeepThinking(prompt: string, context?: any): Promise<string> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: context 
+          ? `[BUSINESS_CONTEXT]\n${JSON.stringify(context, null, 2)}\n\n[QUERY]\n${prompt}` 
+          : prompt,
+        config: {
+          thinkingConfig: { thinkingBudget: 32768 },
+          temperature: 0.8,
+        }
+      });
+      return response.text || "Strategic assistant failed to formulate a response. The query may be outside the current operational parameters.";
+    } catch (error) {
+      console.error("Deep Thinking Error:", error);
+      return "Critical Error: Strategic reasoning engine interrupted. Please verify configuration and network stability.";
+    }
+  },
+
   async generateDescription(productName: string, category: string): Promise<string> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -14,7 +38,6 @@ export const geminiService = {
           temperature: 0.7,
         }
       });
-      // Fix: Using .text property instead of .text() method
       return response.text || "Failed to generate description.";
     } catch (error) {
       console.error("Gemini Error:", error);
@@ -23,6 +46,7 @@ export const geminiService = {
   },
 
   async suggestStoreName(industry: string): Promise<string[]> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -35,7 +59,6 @@ export const geminiService = {
           }
         }
       });
-      // Fix: Using .text property instead of .text() method
       return JSON.parse(response.text || '[]');
     } catch (error) {
       return ["Default Store Name"];

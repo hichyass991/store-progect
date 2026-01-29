@@ -1,4 +1,3 @@
-
 export enum ProductStatus {
   ACTIVE = 'Active',
   DRAFT = 'Draft',
@@ -20,14 +19,35 @@ export enum LeadStatus {
   BLACK_LISTED = 'Black listed'
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  createdAt: string;
+}
+
+export interface Discount {
+  id: string;
+  name: string;
+  type: 'percentage' | 'fixed';
+  value: number;
+  appliesTo: 'all' | string[]; // 'all' or array of product IDs
+  status: 'active' | 'scheduled' | 'expired';
+  createdAt: string;
+}
+
 export interface Product {
   id: string;
   id_num: string;
   title: string;
   sku: string;
   price: number;
+  costPrice: number; // Unit acquisition cost
   backupPrice?: number;
-  stock: number;
+  stock: number; // Current remaining stock
+  purchasedStock: number; // Total units ever acquired
+  soldStock: number; // Total units confirmed/sold
   description: string;
   photo: string;
   allPhotos: string[];
@@ -35,7 +55,12 @@ export interface Product {
   currency: string;
   stockStatus: string;
   status: ProductStatus;
-  category: string;
+  category: string; // Product category
+  upsellIds: string[]; // Linked products for "Frequently Bought Together"
+  discountType: 'none' | 'percentage' | 'fixed';
+  discountValue: number;
+  confirmationRate: number; // Percentage
+  deliveryRate: number; // Percentage
   createdAt: string;
   updatedAt: string;
 }
