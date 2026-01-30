@@ -19,12 +19,13 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [isSyncing, setIsSyncing] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    role: UserRole.ADMIN, // Forced to Admin
+    role: UserRole.ADMIN,
     isActive: true,
     isApproved: true,
     avatar: ''
@@ -52,17 +53,26 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
         return;
     }
 
+    setIsSyncing(userId);
     const updated = { ...target, isActive: !target.isActive };
-    setUsers(prev => prev.map(u => u.id === userId ? updated : u));
+    
+    // Cloud Sync first
     await supabaseService.syncUser(updated);
+    
+    // Update local state
+    setUsers(prev => prev.map(u => u.id === userId ? updated : u));
+    setTimeout(() => setIsSyncing(null), 500);
   };
 
   const approveUser = async (userId: string) => {
     const target = users.find(u => u.id === userId);
     if (!target) return;
+    
+    setIsSyncing(userId);
     const updated = { ...target, isApproved: true };
-    setUsers(prev => prev.map(u => u.id === userId ? updated : u));
     await supabaseService.syncUser(updated);
+    setUsers(prev => prev.map(u => u.id === userId ? updated : u));
+    setTimeout(() => setIsSyncing(null), 500);
   };
 
   const resetForm = () => {
@@ -90,6 +100,7 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
     let userToSync: User;
     if (editingUser) {
       userToSync = { ...editingUser, ...formData, role: UserRole.ADMIN, avatar: avatarUrl };
+      await supabaseService.syncUser(userToSync);
       setUsers(prev => prev.map(u => u.id === editingUser.id ? userToSync : u));
     } else {
       userToSync = {
@@ -97,16 +108,16 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
         name: formData.name,
         email: formData.email,
         password: formData.password || 'gwapa' + Math.floor(Math.random() * 1000),
-        role: UserRole.ADMIN, // Forced to Admin
+        role: UserRole.ADMIN,
         isActive: formData.isActive,
         isApproved: formData.isApproved,
         avatar: avatarUrl,
         createdAt: new Date().toLocaleDateString()
       };
+      await supabaseService.syncUser(userToSync);
       setUsers(prev => [...prev, userToSync]);
     }
     
-    await supabaseService.syncUser(userToSync);
     resetForm();
   };
 
@@ -157,6 +168,13 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
             whileHover={{ y: -5 }}
             className={`bg-white p-10 rounded-[48px] border-2 shadow-xl shadow-slate-200/40 relative group overflow-hidden transition-all ${!u.isActive ? 'border-red-100 opacity-80' : !u.isApproved ? 'border-amber-100' : 'border-slate-100 hover:border-indigo-100'}`}
           >
+            {isSyncing === u.id && (
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center">
+                   <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                   <span className="text-[8px] font-black uppercase text-indigo-600 mt-4 tracking-widest">Persisting in Cloud...</span>
+                </div>
+            )}
+
             {!u.isActive ? (
               <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
             ) : !u.isApproved ? (

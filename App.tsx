@@ -177,10 +177,15 @@ const App: React.FC = () => {
       isActive: true,
       isApproved: false,
       createdAt: new Date().toLocaleDateString(),
-      role: UserRole.ADMIN // Ensuring they are registered as Admin
+      role: UserRole.ADMIN
     };
+    // Await the sync to ensure database captures the user before state update or refresh
     await supabaseService.syncUser(newUser);
-    setUsers(prev => [...prev, newUser]);
+    setUsers(prev => {
+      const exists = prev.find(u => u.email === newUser.email);
+      if (exists) return prev.map(u => u.email === newUser.email ? newUser : u);
+      return [...prev, newUser];
+    });
   };
 
   return (

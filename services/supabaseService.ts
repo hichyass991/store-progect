@@ -15,7 +15,7 @@ export const supabaseService = {
   // --- LEADS ---
   async getLeads(): Promise<Lead[]> {
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*`, { method: 'GET', headers });
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=*&order=created_at.desc`, { method: 'GET', headers });
       const data = await response.json();
       return data.map((item: any) => ({
         id: item.id,
@@ -61,7 +61,8 @@ export const supabaseService = {
         raw_meta: { ...lead, ...extraData },
         created_at: lead.createdAt
       };
-      await fetch(`${SUPABASE_URL}/rest/v1/leads`, { method: 'POST', headers, body: JSON.stringify(payload) });
+      // Use id as conflict target for leads
+      await fetch(`${SUPABASE_URL}/rest/v1/leads?on_conflict=id`, { method: 'POST', headers, body: JSON.stringify(payload) });
     } catch (e) { console.error(e); }
   },
 
@@ -82,10 +83,10 @@ export const supabaseService = {
         title: p.title,
         sku: p.sku,
         price: p.price,
-        costPrice: p.cost_price,
+        cost_price: p.cost_price,
         stock: p.stock,
-        purchasedStock: p.purchased_stock,
-        soldStock: p.sold_stock,
+        purchased_stock: p.purchased_stock,
+        sold_stock: p.sold_stock,
         description: p.description,
         photo: p.photo,
         allPhotos: p.all_photos || [],
@@ -101,7 +102,7 @@ export const supabaseService = {
 
   async syncProduct(p: Product) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/products`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/products?on_conflict=id`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -151,7 +152,7 @@ export const supabaseService = {
 
   async syncCategory(c: Category) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/categories`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/categories?on_conflict=id`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -190,7 +191,7 @@ export const supabaseService = {
 
   async syncDiscount(d: Discount) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/discounts`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/discounts?on_conflict=id`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -229,7 +230,7 @@ export const supabaseService = {
 
   async syncAbandonedCart(cart: AbandonedCart) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/abandoned_carts`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/abandoned_carts?on_conflict=id`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -262,7 +263,7 @@ export const supabaseService = {
 
   async syncSheet(sheet: Sheet) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/sheets`, {
+      await fetch(`${SUPABASE_URL}/rest/v1/sheets?on_conflict=id`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -305,7 +306,8 @@ export const supabaseService = {
 
   async syncUser(user: User) {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/platform_users`, {
+      // CRITICAL: We use on_conflict=email to ensure updates by email stick even if ID is lost locally
+      const resp = await fetch(`${SUPABASE_URL}/rest/v1/platform_users?on_conflict=email`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -320,7 +322,11 @@ export const supabaseService = {
           created_at: user.createdAt
         })
       });
-    } catch (e) { console.error(e); }
+      if (!resp.ok) {
+        const err = await resp.json();
+        console.error("Supabase Sync Error:", err);
+      }
+    } catch (e) { console.error("Network Error during Sync:", e); }
   },
 
   async deleteUser(id: string) {
