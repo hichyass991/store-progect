@@ -53,7 +53,7 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
 
   useEffect(() => {
     if (customer.firstName.length > 2 || customer.phone.length > 5) {
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         const id = 'abc_' + Math.random().toString(36).substr(2, 5);
         const cart: AbandonedCart = {
           id,
@@ -62,6 +62,10 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
           product_id: productId!,
           timestamp: new Date().toLocaleString()
         };
+        
+        // Sync to Supabase
+        await supabaseService.syncAbandonedCart(cart);
+
         setAbandonedCarts(prev => {
           const existingIdx = prev.findIndex(c => c.phone === customer.phone);
           if (existingIdx > -1) {
@@ -146,7 +150,12 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
         status: result.success ? 'success' as const : 'failure' as const,
         message: result.message
       };
-      setSheets(prev => prev.map(s => s.id === targetSheet.id ? { ...s, syncLogs: [log, ...(s.syncLogs || [])].slice(0, 10) } : s));
+      const updatedSheets = sheets.map(s => s.id === targetSheet.id ? { ...s, syncLogs: [log, ...(s.syncLogs || [])].slice(0, 10) } : s);
+      setSheets(updatedSheets);
+      
+      // Update sheet metadata (logs) in Supabase
+      const sheetToSync = updatedSheets.find(s => s.id === targetSheet.id);
+      if (sheetToSync) await supabaseService.syncSheet(sheetToSync);
     }
     
     setLeads(prev => [newLead, ...prev]);

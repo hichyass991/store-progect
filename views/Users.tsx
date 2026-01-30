@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { supabaseService } from '../services/supabaseService';
 
 const Motion = motion as any;
 
@@ -23,7 +24,7 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
     name: '',
     email: '',
     password: '',
-    role: UserRole.AGENT,
+    role: UserRole.ADMIN, // Forced to Admin
     isActive: true,
     isApproved: true,
     avatar: ''
@@ -42,32 +43,37 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
     setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
-  const toggleAccountStatus = (userId: string) => {
-    setUsers(prev => prev.map(u => {
-      if (u.id === userId) {
-        if (u.id === currentUser.id) {
-          alert("Safety Protocol: Administrative lock prevented on own account.");
-          return u;
-        }
-        return { ...u, isActive: !u.isActive };
-      }
-      return u;
-    }));
+  const toggleAccountStatus = async (userId: string) => {
+    const target = users.find(u => u.id === userId);
+    if (!target) return;
+    
+    if (userId === currentUser.id) {
+        alert("Safety Protocol: Administrative lock prevented on own account.");
+        return;
+    }
+
+    const updated = { ...target, isActive: !target.isActive };
+    setUsers(prev => prev.map(u => u.id === userId ? updated : u));
+    await supabaseService.syncUser(updated);
   };
 
-  const approveUser = (userId: string) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, isApproved: true } : u));
+  const approveUser = async (userId: string) => {
+    const target = users.find(u => u.id === userId);
+    if (!target) return;
+    const updated = { ...target, isApproved: true };
+    setUsers(prev => prev.map(u => u.id === userId ? updated : u));
+    await supabaseService.syncUser(updated);
   };
 
   const resetForm = () => {
-    setFormData({ name: '', email: '', password: '', role: UserRole.AGENT, isActive: true, isApproved: true, avatar: '' });
+    setFormData({ name: '', email: '', password: '', role: UserRole.ADMIN, isActive: true, isApproved: true, avatar: '' });
     setEditingUser(null);
     setShowModal(false);
   };
 
   const openAdd = () => {
     setEditingUser(null);
-    setFormData({ name: '', email: '', password: '', role: UserRole.AGENT, isActive: true, isApproved: true, avatar: '' });
+    setFormData({ name: '', email: '', password: '', role: UserRole.ADMIN, isActive: true, isApproved: true, avatar: '' });
     setShowModal(true);
   };
 
@@ -77,35 +83,40 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
     setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const avatarUrl = formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random&color=fff`;
     
+    let userToSync: User;
     if (editingUser) {
-      setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...formData, avatar: avatarUrl } : u));
+      userToSync = { ...editingUser, ...formData, role: UserRole.ADMIN, avatar: avatarUrl };
+      setUsers(prev => prev.map(u => u.id === editingUser.id ? userToSync : u));
     } else {
-      const newUser: User = {
+      userToSync = {
         id: 'u_' + Math.random().toString(36).substr(2, 9),
         name: formData.name,
         email: formData.email,
         password: formData.password || 'gwapa' + Math.floor(Math.random() * 1000),
-        role: formData.role,
+        role: UserRole.ADMIN, // Forced to Admin
         isActive: formData.isActive,
         isApproved: formData.isApproved,
         avatar: avatarUrl,
         createdAt: new Date().toLocaleDateString()
       };
-      setUsers(prev => [...prev, newUser]);
+      setUsers(prev => [...prev, userToSync]);
     }
+    
+    await supabaseService.syncUser(userToSync);
     resetForm();
   };
 
-  const deleteUser = (id: string) => {
+  const deleteUser = async (id: string) => {
     if (id === currentUser.id) {
       alert("You cannot terminate your own administrative access.");
       return;
     }
     if (window.confirm('Revoke access for this staff member?')) {
+      await supabaseService.deleteUser(id);
       setUsers(prev => prev.filter(u => u.id !== id));
     }
   };
@@ -160,8 +171,8 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
             <div className="flex flex-col items-center text-center space-y-6">
               <div className="relative">
                 <img src={u.avatar} className={`w-24 h-24 rounded-[32px] border-4 border-white shadow-2xl transition-all ${!u.isActive || !u.isApproved ? 'grayscale scale-90 opacity-60' : ''}`} />
-                <div className={`absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center text-[10px] ${u.role === UserRole.ADMIN ? 'bg-indigo-600 text-white' : 'bg-emerald-500 text-white'}`}>
-                  <i className={`fas ${u.role === UserRole.ADMIN ? 'fa-shield-alt' : 'fa-user-tie'}`}></i>
+                <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center text-[10px] bg-indigo-600 text-white">
+                  <i className="fas fa-shield-alt"></i>
                 </div>
               </div>
               
@@ -195,7 +206,7 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
                 )}
                 {u.isApproved && (
                    <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest">
-                       Authorized
+                       Authorized Admin
                    </span>
                 )}
               </div>
@@ -232,7 +243,7 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
               <div className="pt-6 border-t border-slate-50 w-full flex justify-between items-center">
                  <div className="text-left">
                     <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Access Role</p>
-                    <p className={`text-[10px] font-black uppercase tracking-tighter ${u.role === UserRole.ADMIN ? 'text-indigo-600' : 'text-emerald-600'}`}>{u.role}</p>
+                    <p className="text-[10px] font-black uppercase tracking-tighter text-indigo-600">Administrator</p>
                  </div>
                  <div className="text-right">
                     <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Joined On</p>
@@ -250,7 +261,7 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
             <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={resetForm} className="fixed inset-0 bg-slate-900/60 backdrop-blur-md" />
             <Motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white w-full max-w-lg rounded-[48px] shadow-3xl overflow-hidden my-auto">
               <header className="p-10 border-b flex justify-between items-center bg-slate-50/50">
-                <h3 className="text-2xl font-black text-slate-800 tracking-tighter italic">{editingUser ? 'Update Personnel' : 'Recruit New Staff'}</h3>
+                <h3 className="text-2xl font-black text-slate-800 tracking-tighter italic">{editingUser ? 'Update Administrator' : 'Recruit New Administrator'}</h3>
                 <button onClick={resetForm} className="w-10 h-10 rounded-full bg-white text-slate-400 hover:text-red-500 transition shadow-sm border border-slate-100 flex items-center justify-center"><i className="fas fa-times"></i></button>
               </header>
               <form onSubmit={handleSubmit} className="p-10 space-y-6">
@@ -276,19 +287,12 @@ const Users: React.FC<UsersProps> = ({ users, setUsers, currentUser, onImpersona
                     <i className="fas fa-lock absolute right-6 top-1/2 -translate-y-1/2 text-slate-300"></i>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Operational Role</label>
-                    <select className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-indigo-500/10 transition font-black text-slate-600 cursor-pointer appearance-none" value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}>
-                      <option value={UserRole.ADMIN}>Administrator</option>
-                      <option value={UserRole.AGENT}>Sales Agent</option>
-                    </select>
-                  </div>
+                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Initial Approval Status</label>
                     <select className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-indigo-500/10 transition font-black text-slate-600 cursor-pointer appearance-none" value={formData.isApproved ? 'approved' : 'pending'} onChange={(e) => setFormData({ ...formData, isApproved: e.target.value === 'approved' })}>
-                      <option value="approved">Pre-Approved</option>
-                      <option value="pending">Awaiting Approval</option>
+                      <option value="approved">Pre-Approved Administrator</option>
+                      <option value="pending">Awaiting Operational Approval</option>
                     </select>
                   </div>
                 </div>

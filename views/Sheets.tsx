@@ -1,6 +1,8 @@
+
 import React, { useState, useMemo } from 'react';
 import { Sheet, Product, Lead, LeadStatus, SyncLog, User } from '../types';
 import { syncService } from '../services/syncService';
+import { supabaseService } from '../services/supabaseService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
@@ -41,7 +43,6 @@ const Sheets: React.FC<SheetsProps> = ({ sheets, setSheets, products, leads, cur
   const openAdd = () => {
     setEditingSheet(null);
     setFormData({ name: '', productIds: [], googleSheetUrl: '', isSyncEnabled: true });
-    // Corrected state setter name from setShowModal to setShowFormModal
     setShowFormModal(true);
   };
 
@@ -56,25 +57,29 @@ const Sheets: React.FC<SheetsProps> = ({ sheets, setSheets, products, leads, cur
     setShowFormModal(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Delete this sheet manager? This will disconnect your catalog from Google Sheets.')) {
+      await supabaseService.deleteSheet(id);
       setSheets(prev => prev.filter(s => s.id !== id));
       if (selectedSheetId === id) setSelectedSheetId(null);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    let sheetToSave: Sheet;
+
     if (editingSheet) {
-      setSheets(prev => prev.map(s => s.id === editingSheet.id ? { 
-        ...s, 
+      sheetToSave = { 
+        ...editingSheet, 
         name: formData.name, 
         productIds: formData.productIds,
         googleSheetUrl: formData.googleSheetUrl,
         isSyncEnabled: formData.isSyncEnabled
-      } : s));
+      };
+      setSheets(prev => prev.map(s => s.id === editingSheet.id ? sheetToSave : s));
     } else {
-      const newSheet: Sheet = {
+      sheetToSave = {
         id: 'sheet_' + Math.random().toString(36).substr(2, 9),
         name: formData.name,
         productIds: formData.productIds,
@@ -83,8 +88,11 @@ const Sheets: React.FC<SheetsProps> = ({ sheets, setSheets, products, leads, cur
         syncLogs: [],
         createdAt: new Date().toLocaleString()
       };
-      setSheets(prev => [newSheet, ...prev]);
+      setSheets(prev => [sheetToSave, ...prev]);
     }
+
+    // Sync to Supabase
+    await supabaseService.syncSheet(sheetToSave);
     resetForm();
   };
 
@@ -346,7 +354,6 @@ const Sheets: React.FC<SheetsProps> = ({ sheets, setSheets, products, leads, cur
         )}
       </div>
 
-      {/* Modal for Creating/Editing Sheets */}
       <AnimatePresence>
         {showFormModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 overflow-y-auto no-scrollbar">

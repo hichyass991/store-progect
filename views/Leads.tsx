@@ -3,6 +3,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { Lead, LeadStatus, Product, Sheet, SyncLog, User, UserRole } from '../types';
 import { syncService } from '../services/syncService';
 import { csvService } from '../services/csvService';
+import { supabaseService } from '../services/supabaseService';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Motion = motion as any;
@@ -52,6 +53,10 @@ const Leads: React.FC<LeadsProps> = ({ leads, setLeads, products, sheets, setShe
       const imported = await csvService.importLeadsFromCSV(file);
       if (imported.length > 0) {
         const enriched = imported.map(l => ({ ...l, assignedTo: currentUser.id }));
+        // Sync each imported lead to Cloud
+        for (const lead of enriched as Lead[]) {
+           await supabaseService.syncLead(lead, products.find(p => p.id === lead.product_id));
+        }
         setLeads(prev => [...(enriched as Lead[]), ...prev]);
         alert(`Successfully ingested ${imported.length} leads into the pipeline.`);
       }
@@ -61,12 +66,18 @@ const Leads: React.FC<LeadsProps> = ({ leads, setLeads, products, sheets, setShe
     e.target.value = ''; // Reset
   };
 
-  const updateStatus = (id: string, newStatus: LeadStatus) => {
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus, updatedAt: new Date().toLocaleString() } : l));
+  const updateStatus = async (id: string, newStatus: LeadStatus) => {
+    const updatedLeads = leads.map(l => l.id === id ? { ...l, status: newStatus, updatedAt: new Date().toLocaleString() } : l);
+    setLeads(updatedLeads);
+    const lead = updatedLeads.find(l => l.id === id);
+    if (lead) {
+      await supabaseService.syncLead(lead, products.find(p => p.id === lead.product_id));
+    }
   };
 
-  const deleteLead = (id: string) => {
+  const deleteLead = async (id: string) => {
     if (window.confirm('Delete this lead?')) {
+      await supabaseService.deleteLead(id);
       setLeads(prev => prev.filter(l => l.id !== id));
     }
   };
@@ -106,31 +117,19 @@ const Leads: React.FC<LeadsProps> = ({ leads, setLeads, products, sheets, setShe
     }
 
     const now = new Date().toLocaleString();
+    let leadToSync: Lead;
     
     if (editingLeadId) {
-      const updatedLeads = leads.map(l => {
-        if (l.id === editingLeadId) {
-          return {
-            ...l,
-            ...newLead,
-            name: `${newLead.firstName} ${newLead.lastName}`,
-            updatedAt: now
-          };
-        }
-        return l;
-      });
-      setLeads(updatedLeads);
-      
-      const updatedLead = updatedLeads.find(l => l.id === editingLeadId);
-      if (updatedLead) {
-        const product = products.find(p => p.id === updatedLead.product_id);
-        const targetSheet = sheets.find(s => s.productIds.includes(updatedLead.product_id) && s.googleSheetUrl);
-        if (targetSheet && targetSheet.googleSheetUrl) {
-          await syncService.pushLead(targetSheet.googleSheetUrl, updatedLead, product);
-        }
-      }
+      const existing = leads.find(l => l.id === editingLeadId)!;
+      leadToSync = {
+        ...existing,
+        ...newLead,
+        name: `${newLead.firstName} ${newLead.lastName}`,
+        updatedAt: now
+      };
+      setLeads(prev => prev.map(l => l.id === editingLeadId ? leadToSync : l));
     } else {
-      const lead: Lead = {
+      leadToSync = {
         id: 'lead_' + Math.random().toString(36).substr(2, 9),
         id_num: '#' + (Math.floor(Math.random() * 9000) + 1000),
         name: `${newLead.firstName} ${newLead.lastName}`,
@@ -150,36 +149,44 @@ const Leads: React.FC<LeadsProps> = ({ leads, setLeads, products, sheets, setShe
         createdAt: now,
         updatedAt: now
       };
+      setLeads(prev => [leadToSync, ...prev]);
+    }
 
-      const product = products.find(p => p.id === newLead.product_id);
-      const targetSheet = sheets.find(s => s.productIds.includes(newLead.product_id) && s.googleSheetUrl);
+    const product = products.find(p => p.id === leadToSync.product_id);
+    
+    // 1. Sync to Supabase
+    await supabaseService.syncLead(leadToSync, product);
+
+    // 2. Sync to Google Sheets if linked
+    const targetSheet = sheets.find(s => s.productIds.includes(leadToSync.product_id) && s.googleSheetUrl);
+    if (targetSheet && targetSheet.googleSheetUrl) {
+      setSyncingSheet(targetSheet.name);
+      const syncResult = await syncService.pushLead(targetSheet.googleSheetUrl, leadToSync, product);
       
-      if (targetSheet && targetSheet.googleSheetUrl) {
-        setSyncingSheet(targetSheet.name);
-        const syncResult = await syncService.pushLead(targetSheet.googleSheetUrl, lead, product);
-        
-        const newLog: SyncLog = {
-          id: 'log_' + Math.random().toString(36).substr(2, 5),
-          timestamp: now,
-          entityName: lead.name,
-          status: syncResult.success ? 'success' : 'failure',
-          message: syncResult.message
-        };
+      const newLog: SyncLog = {
+        id: 'log_' + Math.random().toString(36).substr(2, 5),
+        timestamp: now,
+        entityName: leadToSync.name,
+        status: syncResult.success ? 'success' : 'failure',
+        message: syncResult.message
+      };
 
-        setSheets(prev => prev.map(s => s.id === targetSheet.id ? {
-          ...s,
-          syncLogs: [newLog, ...(s.syncLogs || [])].slice(0, 10)
-        } : s));
+      const updatedSheets = sheets.map(s => s.id === targetSheet.id ? {
+        ...s,
+        syncLogs: [newLog, ...(s.syncLogs || [])].slice(0, 10)
+      } : s);
+      setSheets(updatedSheets);
+      
+      // Update the sheet in Supabase too
+      const sheetObj = updatedSheets.find(s => s.id === targetSheet.id);
+      if (sheetObj) await supabaseService.syncSheet(sheetObj);
 
-        setTimeout(() => setSyncingSheet(null), 2500);
-      }
-      setLeads(prev => [lead, ...prev]);
+      setTimeout(() => setSyncingSheet(null), 2500);
     }
     
     closeForm();
   };
 
-  // RBAC Filtering: Agents only see their leads. Admins see everything.
   const filtered = useMemo(() => {
     let base = leads;
     if (currentUser.role === UserRole.AGENT) {

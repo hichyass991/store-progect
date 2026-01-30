@@ -32,9 +32,20 @@ const App: React.FC = () => {
       const saved = localStorage.getItem(key);
       return saved ? JSON.parse(saved) : defaultValue;
     } catch (e) {
-      console.warn(`Local Storage Parse Error for key: ${key}`, e);
       return defaultValue;
     }
+  };
+
+  const DEFAULT_ADMIN: User = { 
+    id: 'u_1', 
+    name: 'Hicham Idali', 
+    email: 'admin@gwapashop.pro', 
+    password: 'admin123',
+    role: UserRole.ADMIN, 
+    avatar: 'https://ui-avatars.com/api/?name=Hicham+Idali&background=4f46e5&color=fff',
+    isActive: true,
+    isApproved: true,
+    createdAt: new Date().toLocaleDateString()
   };
 
   const [products, setProducts] = useState<Product[]>(() => getSafeLocalStorage('gwapa_products', []));
@@ -47,39 +58,56 @@ const App: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>(() => getSafeLocalStorage('gwapa_payments', []));
   const [supportRequests, setSupportRequests] = useState<SupportRequest[]>(() => getSafeLocalStorage('gwapa_support_requests', []));
   const [globalCurrency, setGlobalCurrency] = useState<string>(() => getSafeLocalStorage('gwapa_global_currency', 'SAR'));
+  const [categories, setCategories] = useState<Category[]>(() => getSafeLocalStorage('gwapa_categories', []));
   
-  const [users, setUsers] = useState<User[]>(() => getSafeLocalStorage('gwapa_users', [
-    { 
-      id: 'u_1', 
-      name: 'Hicham Idali', 
-      email: 'admin@gwapashop.pro', 
-      password: 'admin123',
-      role: UserRole.ADMIN, 
-      avatar: 'https://ui-avatars.com/api/?name=Hicham+Idali&background=4f46e5&color=fff',
-      isActive: true,
-      isApproved: true,
-      createdAt: new Date().toLocaleDateString()
-    }
-  ]));
+  const [users, setUsers] = useState<User[]>(() => getSafeLocalStorage('gwapa_users', [DEFAULT_ADMIN]));
 
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    return getSafeLocalStorage<User | null>('gwapa_current_user', null);
-  });
-
-  const [impersonator, setImpersonator] = useState<User | null>(() => {
-    return getSafeLocalStorage<User | null>('gwapa_impersonator', null);
-  });
-
+  const [currentUser, setCurrentUser] = useState<User | null>(() => getSafeLocalStorage('gwapa_current_user', null));
+  const [impersonator, setImpersonator] = useState<User | null>(() => getSafeLocalStorage('gwapa_impersonator', null));
   const [navOrder, setNavOrder] = useState<string[]>(() => getSafeLocalStorage('gwapa_nav_order', [
     '/dashboard', '/leads', '/invoices', '/stores', '/products', '/sheets', '/users', '/settings', '/support'
   ]));
 
-  const [categories, setCategories] = useState<Category[]>(() => {
-    return getSafeLocalStorage('gwapa_categories', [
-      { id: 'cat_1', name: 'Electronics', description: 'Modern gadgets and tech.', icon: 'fa-laptop', createdAt: new Date().toLocaleDateString() },
-      { id: 'cat_2', name: 'Fashion', description: 'Apparel and accessories.', icon: 'fa-shirt', createdAt: new Date().toLocaleDateString() }
-    ]);
-  });
+  // --- SUPABASE HYDRATION EFFECT ---
+  useEffect(() => {
+    const hydrateFromCloud = async () => {
+      console.log("Syncing all data with Supabase Cloud...");
+      
+      try {
+        const [cloudUsers, cloudLeads, cloudProducts, cloudCats, cloudDiscounts, cloudAbandoned, cloudSheets] = await Promise.all([
+          supabaseService.getUsers(),
+          supabaseService.getLeads(),
+          supabaseService.getProducts(),
+          supabaseService.getCategories(),
+          supabaseService.getDiscounts(),
+          supabaseService.getAbandonedCarts(),
+          supabaseService.getSheets()
+        ]);
+
+        // Logic to ensure Admin exists
+        let finalUsers = [...cloudUsers];
+        const adminInCloud = cloudUsers.find(u => u.email === DEFAULT_ADMIN.email);
+        
+        if (!adminInCloud) {
+          console.log("Admin missing from Cloud. Syncing default admin...");
+          await supabaseService.syncUser(DEFAULT_ADMIN);
+          finalUsers = [DEFAULT_ADMIN, ...cloudUsers];
+        }
+
+        if (finalUsers.length) setUsers(finalUsers);
+        if (cloudLeads.length) setLeads(cloudLeads);
+        if (cloudProducts.length) setProducts(cloudProducts);
+        if (cloudCats.length) setCategories(cloudCats);
+        if (cloudDiscounts.length) setDiscounts(cloudDiscounts);
+        if (cloudAbandoned.length) setAbandonedCarts(cloudAbandoned);
+        if (cloudSheets.length) setSheets(cloudSheets);
+      } catch (err) {
+        console.error("Hydration failed. Offline mode active.", err);
+      }
+    };
+
+    hydrateFromCloud();
+  }, []);
 
   useEffect(() => { localStorage.setItem('gwapa_products', JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem('gwapa_leads', JSON.stringify(leads)); }, [leads]);
@@ -142,24 +170,16 @@ const App: React.FC = () => {
   };
 
   const handleRegister = async (userData: Omit<User, 'id' | 'avatar' | 'isActive' | 'isApproved' | 'createdAt'>) => {
-    const existing = users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
-    if (existing) {
-      alert("This email is already registered in the Gwapashop core.");
-      return;
-    }
-
     const newUser: User = {
       id: 'u_' + Math.random().toString(36).substr(2, 9),
       ...userData,
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name)}&background=random&color=fff`,
       isActive: true,
       isApproved: false,
-      createdAt: new Date().toLocaleDateString()
+      createdAt: new Date().toLocaleDateString(),
+      role: UserRole.ADMIN // Ensuring they are registered as Admin
     };
-
-    // Sync to Supabase
     await supabaseService.syncUser(newUser);
-
     setUsers(prev => [...prev, newUser]);
   };
 
@@ -167,10 +187,8 @@ const App: React.FC = () => {
     <HashRouter>
       <Routes>
         <Route path="/login" element={currentUser ? <Navigate to="/dashboard" replace /> : <Login users={users} setCurrentUser={setCurrentUser} onSendSupportRequest={handleSendSupportRequest} onRegister={handleRegister} />} />
-        
         <Route path="/store/:productId" element={<Storefront products={products} setLeads={setLeads} setAbandonedCarts={setAbandonedCarts} sheets={sheets} setSheets={setSheets} />} />
         <Route path="/s/:storeId" element={<StoreHome stores={stores} products={products} />} />
-        
         <Route element={currentUser ? <Layout currentUser={currentUser} impersonator={impersonator} onRestoreAdmin={handleRestoreAdmin} handleLogout={handleLogout} users={users} navOrder={navOrder} /> : <Navigate to="/login" replace />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard products={products} leads={leads} currentUser={currentUser!} />} />

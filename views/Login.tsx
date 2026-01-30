@@ -66,11 +66,12 @@ const Login: React.FC<LoginProps> = ({ users, setCurrentUser, onSendSupportReque
     }
 
     setTimeout(() => {
-        onRegister({ name, email, password, role: UserRole.AGENT });
+        // Updated to use UserRole.ADMIN
+        onRegister({ name, email, password, role: UserRole.ADMIN });
         setIsLoading(false);
         const newUser: User = {
           id: 'temp_' + Math.random().toString(36).substr(2, 5),
-          name, email, role: UserRole.AGENT,
+          name, email, role: UserRole.ADMIN,
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
           isActive: true, isApproved: false,
           createdAt: new Date().toLocaleDateString()

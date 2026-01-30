@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Product, ProductStatus, User, Category } from '../types';
 import { csvService } from '../services/csvService';
+import { supabaseService } from '../services/supabaseService';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Motion = motion as any;
@@ -67,8 +68,9 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
     };
   }, [filtered]);
 
-  const deleteProduct = (id: string) => {
+  const deleteProduct = async (id: string) => {
     if (window.confirm('Delete this product artifact?')) {
+      await supabaseService.deleteProduct(id);
       setProducts(prev => prev.filter(p => p.id !== id));
     }
   };
@@ -130,7 +132,7 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
             <h5 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Avg Order Conversion</h5>
             <div className="text-3xl font-black text-indigo-600">{stats.avgConf}%</div>
             <div className="mt-4 w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-              <div className="bg-indigo-500 h-full" style={{ width: `${stats.avgConf}%` }}></div>
+              <div className="bg-indigo-50 h-full" style={{ width: `${stats.avgConf}%` }}></div>
             </div>
           </div>
           <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
