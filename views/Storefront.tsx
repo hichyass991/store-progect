@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Product, Lead, LeadStatus, AbandonedCart } from '../types';
+import { Product, Lead, LeadStatus, AbandonedCart, Sheet } from '../types';
+import { syncService } from '../services/syncService';
 
 interface StorefrontProps {
   products: Product[];
   setLeads: React.Dispatch<React.SetStateAction<Lead[]>>;
   setAbandonedCarts: React.Dispatch<React.SetStateAction<AbandonedCart[]>>;
+  sheets: Sheet[];
+  setSheets: React.Dispatch<React.SetStateAction<Sheet[]>>;
 }
 
-const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandonedCarts }) => {
+const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandonedCarts, sheets, setSheets }) => {
   const { productId } = useParams();
   const navigate = useNavigate();
   const product = products.find(p => p.id === productId);
@@ -82,18 +85,15 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
     });
   };
 
-  const handleOrder = (e: React.FormEvent) => {
+  const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer.name || !customer.phone) return alert("Please fill in your details.");
 
     const now = new Date().toLocaleString();
-    
-    // Split name into first and last for Lead interface requirements
     const nameParts = customer.name.trim().split(/\s+/);
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
-    // Create lead for the main product with all required Lead properties
     const newLead: Lead = {
       id: 'lead_' + Math.random().toString(36).substr(2, 9),
       id_num: '#' + (Math.floor(Math.random() * 9000) + 1000),
@@ -109,12 +109,30 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
       city: '',
       product_id: productId!,
       status: LeadStatus.NEW,
+      source: 'Storefront',
       createdAt: now,
       updatedAt: now
     };
 
-    // If upsells are selected, we can either create multiple leads or mark them in a note
-    // For this implementation, we'll focus on the main lead.
+    // --- AUTOMATIC CLOUD SYNC ---
+    const targetSheet = sheets.find(s => s.productIds.includes(productId!) && s.googleSheetUrl);
+    if (targetSheet && targetSheet.googleSheetUrl) {
+      const result = await syncService.pushLead(targetSheet.googleSheetUrl, newLead, product);
+      
+      // Log the sync
+      const log = {
+        id: 'log_' + Math.random().toString(36).substr(2, 5),
+        timestamp: now,
+        entityName: newLead.name,
+        status: result.success ? 'success' as const : 'failure' as const,
+        message: result.message
+      };
+
+      setSheets(prev => prev.map(s => s.id === targetSheet.id ? {
+        ...s,
+        syncLogs: [log, ...(s.syncLogs || [])].slice(0, 10)
+      } : s));
+    }
     
     setLeads(prev => [newLead, ...prev]);
     setAbandonedCarts(prev => prev.filter(c => c.phone !== customer.phone));

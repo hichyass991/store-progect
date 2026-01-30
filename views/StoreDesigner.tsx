@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Store, Product, StoreSection, SectionType } from '../types';
+import { Store, Product, StoreSection, SectionType, User } from '../types';
 import HeroSection from '../components/HeroSection';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -11,9 +11,11 @@ interface StoreDesignerProps {
   stores: Store[];
   setStores: React.Dispatch<React.SetStateAction<Store[]>>;
   products: Product[];
+  // Added missing currentUser prop to fix App.tsx error
+  currentUser: User;
 }
 
-const StoreDesigner: React.FC<StoreDesignerProps> = ({ stores, setStores, products }) => {
+const StoreDesigner: React.FC<StoreDesignerProps> = ({ stores, setStores, products, currentUser }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [editingStore, setEditingStore] = useState<Store | null>(null);
@@ -123,9 +125,10 @@ const StoreDesigner: React.FC<StoreDesignerProps> = ({ stores, setStores, produc
     try {
         const currentMedia = editingSection.content.media || [];
         const remainingSlots = 5 - currentMedia.length;
-        const filesToProcess = Array.from(files).slice(0, remainingSlots);
+        // Explicitly cast to File[] to avoid unknown type inference errors
+        const filesToProcess = Array.from(files).slice(0, remainingSlots) as File[];
 
-        const processed = await Promise.all(filesToProcess.map(async (file) => {
+        const processed = await Promise.all(filesToProcess.map(async (file: File) => {
             if (file.type.startsWith('image')) {
                 const compressed = await compressImage(file);
                 return { type: 'image', url: compressed };

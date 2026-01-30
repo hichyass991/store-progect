@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Category } from '../types';
+import { Category, User } from '../types';
 
 interface CategoriesProps {
   categories: Category[];
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
+  // Added missing currentUser prop to fix App.tsx error
+  currentUser: User;
 }
 
-const Categories: React.FC<CategoriesProps> = ({ categories, setCategories }) => {
+const Categories: React.FC<CategoriesProps> = ({ categories, setCategories, currentUser }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState({ name: '', description: '', icon: 'fa-tag' });

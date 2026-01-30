@@ -1,14 +1,15 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Store } from '../types';
+import { Store, User } from '../types';
 
 interface StoresProps {
   stores: Store[];
   setStores: React.Dispatch<React.SetStateAction<Store[]>>;
+  // Added missing currentUser prop to fix App.tsx error
+  currentUser: User;
 }
 
-const Stores: React.FC<StoresProps> = ({ stores, setStores }) => {
+const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
   const navigate = useNavigate();
   
   const [isAdding, setIsAdding] = useState(false);
@@ -213,7 +214,8 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores }) => {
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           const result = ev.target?.result as string;
-                          setCustomizingStore({ ...customizingStore, logo: result });
+                          // Use functional update to ensure correct type narrowing in closures
+                          setCustomizingStore(prev => prev ? { ...prev, logo: result } : null);
                         };
                         reader.readAsDataURL(file);
                       }
@@ -229,7 +231,8 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores }) => {
                     type="text" 
                     className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-4 rounded-2xl outline-none transition font-bold"
                     value={customizingStore.name}
-                    onChange={(e) => setCustomizingStore({ ...customizingStore, name: e.target.value })}
+                    // Use functional update to ensure correct type narrowing in closures
+                    onChange={(e) => setCustomizingStore(prev => prev ? { ...prev, name: e.target.value } : null)}
                   />
                 </div>
               </section>
@@ -243,7 +246,8 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores }) => {
                       type="text" placeholder="WhatsApp Number" 
                       className="bg-transparent flex-1 outline-none text-xs font-bold"
                       value={customizingStore.social.wa}
-                      onChange={(e) => setCustomizingStore({ ...customizingStore, social: { ...customizingStore.social, wa: e.target.value } })}
+                      // Use functional update to ensure correct type narrowing in closures
+                      onChange={(e) => setCustomizingStore(prev => prev ? { ...prev, social: { ...prev.social, wa: e.target.value } } : null)}
                     />
                   </div>
                   <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl group focus-within:ring-2 focus-within:ring-pink-500 transition-all">
@@ -252,7 +256,8 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores }) => {
                       type="text" placeholder="Instagram Username" 
                       className="bg-transparent flex-1 outline-none text-xs font-bold"
                       value={customizingStore.social.ig}
-                      onChange={(e) => setCustomizingStore({ ...customizingStore, social: { ...customizingStore.social, ig: e.target.value } })}
+                      // Use functional update to ensure correct type narrowing in closures
+                      onChange={(e) => setCustomizingStore(prev => prev ? { ...prev, social: { ...prev.social, ig: e.target.value } } : null)}
                     />
                   </div>
                 </div>

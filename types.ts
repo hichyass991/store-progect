@@ -1,3 +1,4 @@
+
 export enum ProductStatus {
   ACTIVE = 'Active',
   DRAFT = 'Draft',
@@ -19,6 +20,63 @@ export enum LeadStatus {
   BLACK_LISTED = 'Black listed'
 }
 
+export enum UserRole {
+  ADMIN = 'Administrator',
+  AGENT = 'Sales Agent'
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password?: string; // For authentication
+  role: UserRole;
+  avatar: string;
+  isActive: boolean; // Account status (Suspension)
+  isApproved: boolean; // Registration approval status
+  createdAt: string;
+}
+
+export interface SupportAttachment {
+  type: 'image' | 'video';
+  url: string;
+}
+
+export interface SupportReply {
+  id: string;
+  adminId: string;
+  adminName: string;
+  message: string;
+  timestamp: string;
+}
+
+export interface SupportRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  message: string;
+  attachments?: SupportAttachment[];
+  replies?: SupportReply[];
+  timestamp: string;
+  status: 'pending' | 'resolved';
+}
+
+export interface Payment {
+  id: string;
+  userId: string;
+  amount: number;
+  timestamp: string;
+  method: string;
+  note?: string;
+}
+
+export interface GoogleConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -35,6 +93,15 @@ export interface Discount {
   appliesTo: 'all' | string[]; // 'all' or array of product IDs
   status: 'active' | 'scheduled' | 'expired';
   createdAt: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  name: string; // e.g., "Size" or "Color"
+  value: string; // e.g., "XL" or "Midnight Blue"
+  sku: string;
+  price: number;
+  stock: number;
 }
 
 export interface Product {
@@ -61,6 +128,7 @@ export interface Product {
   discountValue: number;
   confirmationRate: number; // Percentage
   deliveryRate: number; // Percentage
+  variants: ProductVariant[];
   createdAt: string;
   updatedAt: string;
 }
@@ -80,8 +148,28 @@ export interface Lead {
   city: string;
   product_id: string;
   status: LeadStatus;
+  source?: 'Manual' | 'Storefront';
+  assignedTo?: string; // User ID
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SyncLog {
+  id: string;
+  timestamp: string;
+  entityName: string;
+  status: 'success' | 'failure';
+  message: string;
+}
+
+export interface Sheet {
+  id: string;
+  name: string;
+  googleSheetUrl: string;
+  productIds: string[];
+  isSyncEnabled: boolean;
+  syncLogs: SyncLog[];
+  createdAt: string;
 }
 
 export interface AbandonedCart {

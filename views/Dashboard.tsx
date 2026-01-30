@@ -1,16 +1,22 @@
 
 import React from 'react';
-import { Product, Lead, LeadStatus } from '../types';
+import { Product, Lead, LeadStatus, User, UserRole } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface DashboardProps {
   products: Product[];
   leads: Lead[];
+  currentUser: User;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, leads }) => {
-  const totalLeads = leads.length;
-  const confirmedLeads = leads.filter(l => l.status === LeadStatus.CONFIRMED).length;
+const Dashboard: React.FC<DashboardProps> = ({ products, leads, currentUser }) => {
+  // Filter leads if the user is an agent
+  const relevantLeads = currentUser.role === UserRole.AGENT
+    ? leads.filter(l => l.assignedTo === currentUser.id)
+    : leads;
+
+  const totalLeads = relevantLeads.length;
+  const confirmedLeads = relevantLeads.filter(l => l.status === LeadStatus.CONFIRMED).length;
   const totalProducts = products.length;
   const totalValue = products.reduce((acc, p) => acc + (p.price * p.stock), 0);
 
@@ -22,21 +28,35 @@ const Dashboard: React.FC<DashboardProps> = ({ products, leads }) => {
   const COLORS = ['#059669', '#cbd5e1'];
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-8 space-y-8 animate-in fade-in duration-500">
+      <header className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">
+            {currentUser.role === UserRole.ADMIN ? 'Global Performance' : 'My Performance'}
+          </h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Real-time Operational Metrics</p>
+        </div>
+        {currentUser.role === UserRole.AGENT && (
+           <div className="px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-xl">
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Active Agent Mode</span>
+           </div>
+        )}
+      </header>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl border shadow-sm">
+        <div className="bg-white p-6 rounded-[32px] border shadow-sm group hover:shadow-xl transition-all duration-300">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Leads</p>
           <h3 className="text-3xl font-black text-slate-800 mt-2">{totalLeads}</h3>
         </div>
-        <div className="bg-white p-6 rounded-2xl border shadow-sm">
+        <div className="bg-white p-6 rounded-[32px] border shadow-sm group hover:shadow-xl transition-all duration-300">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Confirmed Orders</p>
           <h3 className="text-3xl font-black text-emerald-600 mt-2">{confirmedLeads}</h3>
         </div>
-        <div className="bg-white p-6 rounded-2xl border shadow-sm">
+        <div className="bg-white p-6 rounded-[32px] border shadow-sm group hover:shadow-xl transition-all duration-300">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Products</p>
           <h3 className="text-3xl font-black text-slate-800 mt-2">{totalProducts}</h3>
         </div>
-        <div className="bg-white p-6 rounded-2xl border shadow-sm">
+        <div className="bg-white p-6 rounded-[32px] border shadow-sm group hover:shadow-xl transition-all duration-300">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Inventory Value</p>
           <h3 className="text-3xl font-black text-emerald-600 mt-2">
             {totalValue.toLocaleString()} <span className="text-sm">SAR</span>
@@ -45,7 +65,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, leads }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-8 rounded-3xl border shadow-sm min-h-[400px]">
+        <div className="bg-white p-8 rounded-[40px] border shadow-sm min-h-[400px]">
           <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-8">Lead Conversion</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -79,7 +99,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, leads }) => {
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-3xl border shadow-sm min-h-[400px]">
+        <div className="bg-white p-8 rounded-[40px] border shadow-sm min-h-[400px]">
           <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-8">Stock Level Analytics</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">

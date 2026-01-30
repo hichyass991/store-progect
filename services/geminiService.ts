@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 /**
@@ -28,20 +29,52 @@ export const geminiService = {
     }
   },
 
-  async generateDescription(productName: string, category: string): Promise<string> {
+  /**
+   * Generates a high-conversion e-commerce description based on rich product data.
+   */
+  async generateDescription(context: {
+    title: string;
+    category: string;
+    price: number;
+    currency: string;
+    sku: string;
+    variants?: any[];
+  }): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
+      const variantText = context.variants && context.variants.length > 0 
+        ? `Available in multiple options including: ${context.variants.map(v => `${v.name} (${v.value})`).join(', ')}.`
+        : "";
+
+      const prompt = `
+        Role: Senior E-commerce Copywriter for a Luxury Brand.
+        Task: Write a professional, high-conversion product description.
+        Product Name: "${context.title}"
+        Category: "${context.category}"
+        Price Point: ${context.price} ${context.currency}
+        SKU Reference: ${context.sku}
+        ${variantText}
+
+        Guidelines:
+        1. Keep it under 120 words.
+        2. Use a sophisticated, persuasive, and architectural tone.
+        3. Focus on quality, exclusivity, and user benefits.
+        4. Use short, punchy sentences.
+        5. Do not use generic filler words.
+      `;
+
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Write a persuasive, professional e-commerce product description for a product named "${productName}" in the "${category}" category. Keep it under 100 words and focus on value propositions.`,
+        contents: prompt,
         config: {
-          temperature: 0.7,
+          temperature: 0.75,
+          topP: 0.95,
         }
       });
-      return response.text || "Failed to generate description.";
+      return response.text || "Failed to generate narrative.";
     } catch (error) {
-      console.error("Gemini Error:", error);
-      return "AI generation failed. Please enter manually.";
+      console.error("Gemini Generation Error:", error);
+      return "AI generation failed. Please enter narrative manually.";
     }
   },
 

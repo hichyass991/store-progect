@@ -1,19 +1,26 @@
+
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Product, ProductStatus } from '../types';
+import { useNavigate, Link } from 'react-router-dom';
+import { Product, ProductStatus, User, Category } from '../types';
+import { csvService } from '../services/csvService';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const Motion = motion as any;
 
 interface ProductsProps {
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  currentUser: User;
+  categories: Category[];
 }
 
-const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
+const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser, categories }) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterCategory, setFilterCategory] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'inventory' | 'analytics'>('inventory');
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -21,9 +28,14 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
                            p.sku.toLowerCase().includes(search.toLowerCase()) ||
                            p.category.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = filterStatus === 'All' || p.status === filterStatus;
-      return matchesSearch && matchesStatus;
+      const matchesCategory = filterCategory === 'All' || p.category === filterCategory;
+      return matchesSearch && matchesStatus && matchesCategory;
     });
-  }, [products, search, filterStatus]);
+  }, [products, search, filterStatus, filterCategory]);
+
+  const handleExport = () => {
+    csvService.exportToCSV(products, 'gwapa_catalog_manifest');
+  };
 
   const stats = useMemo(() => {
     if (filtered.length === 0) return { avgRoi: 0, totalSales: 0, avgConf: 0, avgDel: 0, capitalAtRisk: 0, totalProfit: 0 };
@@ -69,6 +81,13 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Inventory Management & Performance Analytics</p>
         </div>
         <div className="flex gap-3">
+          <button 
+            onClick={handleExport}
+            className="bg-white border-2 border-slate-100 text-slate-600 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:border-emerald-500 transition flex items-center gap-2"
+          >
+            <i className="fas fa-download"></i> Export Manifest
+          </button>
+          
           <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
              <button 
                 onClick={() => setViewMode('inventory')}
@@ -124,29 +143,48 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
         </div>
       )}
 
-      <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="relative md:col-span-2">
+      <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div className="relative md:col-span-4">
           <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
           <input 
             type="text" 
-            placeholder="Filter by SKU, Category, Narrative..." 
+            placeholder="Search by Title or SKU..." 
             className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select 
-          className="bg-slate-50 border-none px-4 py-3 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer"
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-        >
-          <option value="All">All Visibility States</option>
-          <option value={ProductStatus.ACTIVE}>Live Production</option>
-          <option value={ProductStatus.DRAFT}>Work in Progress</option>
-          <option value={ProductStatus.ARCHIVED}>System Archive</option>
-        </select>
-        <div className="flex items-center justify-end px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-          {filtered.length} Entities Indexed
+        
+        <div className="md:col-span-3 flex items-center gap-3 bg-slate-50 px-4 rounded-2xl group border border-transparent focus-within:border-emerald-100 transition-all">
+          <i className="fas fa-tags text-slate-300 text-xs"></i>
+          <select 
+            className="flex-1 bg-transparent border-none py-3 text-xs font-bold outline-none appearance-none cursor-pointer text-slate-600"
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+          >
+            <option value="All">All Categories</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.name}>{cat.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="md:col-span-3 flex items-center gap-3 bg-slate-50 px-4 rounded-2xl group border border-transparent focus-within:border-emerald-100 transition-all">
+          <i className="fas fa-eye text-slate-300 text-xs"></i>
+          <select 
+            className="flex-1 bg-transparent border-none py-3 text-xs font-bold outline-none appearance-none cursor-pointer text-slate-600"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="All">All Statuses</option>
+            <option value={ProductStatus.ACTIVE}>Live Production</option>
+            <option value={ProductStatus.DRAFT}>Work in Progress</option>
+            <option value={ProductStatus.ARCHIVED}>System Archive</option>
+          </select>
+        </div>
+
+        <div className="md:col-span-2 flex items-center justify-end px-2 text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
+          {filtered.length} Results
         </div>
       </div>
 
@@ -184,7 +222,6 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
                 const price = p.price || 0;
                 const margin = price - cost;
                 const roi = cost > 0 ? ((margin / cost) * 100).toFixed(0) : '0';
-                
                 const health = (confRate * delRate) / 100;
 
                 return (
@@ -201,11 +238,16 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
                           )}
                         </div>
                         <div>
-                          <div className="font-black text-slate-800 text-sm leading-tight">{p.title}</div>
+                          <button 
+                            onClick={() => setQuickViewProduct(p)}
+                            className="font-black text-slate-800 text-sm leading-tight hover:text-emerald-600 transition-colors cursor-pointer text-left block"
+                          >
+                            {p.title}
+                          </button>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{p.sku}</span>
                             <span className="w-0.5 h-0.5 rounded-full bg-slate-300"></span>
-                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">{p.category || 'Luxury'}</span>
+                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">{p.category || 'Uncategorized'}</span>
                           </div>
                         </div>
                       </div>
@@ -283,7 +325,7 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                          onClick={() => setSelectedProduct(p)}
+                          onClick={() => navigate(`/products/view/${p.id}`)}
                           title="Detailed Intelligence"
                           className="w-10 h-10 rounded-xl bg-white text-indigo-600 shadow-sm border border-indigo-100 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all"
                         >
@@ -324,163 +366,6 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
         </div>
       </div>
       
-      <AnimatePresence>
-        {selectedProduct && (
-          <div className="fixed inset-0 z-[100] flex justify-end">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedProduct(null)}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="relative w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col"
-            >
-              <header className="p-8 border-b flex justify-between items-center bg-slate-50/50">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-white shadow-xl">
-                    <img src={selectedProduct.photo} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">{selectedProduct.title}</h3>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Performance Analytics Teardown</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setSelectedProduct(null)}
-                  className="w-10 h-10 rounded-full hover:bg-white flex items-center justify-center text-slate-400 hover:text-red-500 transition shadow-sm border border-slate-100 bg-white"
-                >
-                  <i className="fas fa-times"></i>
-                </button>
-              </header>
-
-              <div className="flex-1 overflow-y-auto p-8 space-y-10 no-scrollbar">
-                <section className="grid grid-cols-2 gap-4">
-                  <div className="bg-indigo-600 p-8 rounded-[40px] text-white space-y-4 shadow-xl shadow-indigo-100">
-                    <h4 className="text-[9px] font-black uppercase tracking-[0.3em] opacity-60">Realized Profit</h4>
-                    <div className="text-4xl font-black tracking-tighter">
-                      {(selectedProduct.soldStock * (selectedProduct.price - selectedProduct.costPrice)).toLocaleString()}
-                      <span className="text-base ml-1 opacity-60">SAR</span>
-                    </div>
-                    <div className="pt-4 border-t border-white/10 flex justify-between items-center">
-                       <span className="text-[9px] font-bold uppercase opacity-50">Unit Margin</span>
-                       <span className="text-lg font-black">+{selectedProduct.price - selectedProduct.costPrice}</span>
-                    </div>
-                  </div>
-                  <div className="bg-emerald-500 p-8 rounded-[40px] text-white space-y-4 shadow-xl shadow-emerald-100">
-                    <h4 className="text-[9px] font-black uppercase tracking-[0.3em] opacity-60">Campaign ROI</h4>
-                    <div className="text-4xl font-black tracking-tighter">
-                      {selectedProduct.costPrice > 0 ? (((selectedProduct.price - selectedProduct.costPrice) / selectedProduct.costPrice) * 100).toFixed(0) : 0}
-                      <span className="text-base ml-1 opacity-60">%</span>
-                    </div>
-                    <div className="pt-4 border-t border-white/10 flex justify-between items-center">
-                       <span className="text-[9px] font-bold uppercase opacity-50">Yield Grade</span>
-                       <span className="text-xs font-black uppercase px-2 py-0.5 bg-white/20 rounded-full">Optimal</span>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="space-y-6">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
-                    <i className="fas fa-cubes text-slate-400"></i> Stock Lifecycle Ledger
-                  </h4>
-                  <div className="bg-slate-50 p-8 rounded-[40px] border border-white space-y-8">
-                     <div className="flex justify-between items-end">
-                        <div className="space-y-1">
-                           <div className="text-3xl font-black text-slate-800">{selectedProduct.purchasedStock}</div>
-                           <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Acquired</div>
-                        </div>
-                        <div className="space-y-1 text-right">
-                           <div className="text-3xl font-black text-emerald-600">{selectedProduct.soldStock}</div>
-                           <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Confirmed Sales</div>
-                        </div>
-                     </div>
-                     <div className="relative h-4 bg-slate-200 rounded-full overflow-hidden flex">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(selectedProduct.soldStock / selectedProduct.purchasedStock) * 100}%` }}
-                          transition={{ duration: 1.5, ease: "circOut" }}
-                          className="bg-emerald-500 h-full"
-                        />
-                     </div>
-                     <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-200/50">
-                        <div className="text-center">
-                           <div className="text-xs font-black text-slate-600">{selectedProduct.purchasedStock - selectedProduct.soldStock}</div>
-                           <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">Available</div>
-                        </div>
-                        <div className="text-center">
-                           <div className="text-xs font-black text-slate-600">{(selectedProduct.soldStock / selectedProduct.purchasedStock * 100).toFixed(1)}%</div>
-                           <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">Sell-Through</div>
-                        </div>
-                        <div className="text-center">
-                           <div className="text-xs font-black text-red-500">{(selectedProduct.purchasedStock - selectedProduct.soldStock) * selectedProduct.costPrice} SAR</div>
-                           <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">At Risk</div>
-                        </div>
-                     </div>
-                  </div>
-                </section>
-
-                <section className="space-y-6">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
-                    <i className="fas fa-filter text-slate-400"></i> Funnel Conversion Health
-                  </h4>
-                  <div className="grid grid-cols-2 gap-8">
-                     <div className="p-8 bg-white border-2 border-slate-50 rounded-[40px] text-center space-y-4">
-                        <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-indigo-600 text-xl font-black">
-                           {selectedProduct.confirmationRate}%
-                        </div>
-                        <div className="space-y-1">
-                           <div className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Confirmation</div>
-                           <div className="text-[9px] font-bold text-slate-400">Lead to CRM conversion</div>
-                        </div>
-                     </div>
-                     <div className="p-8 bg-white border-2 border-slate-50 rounded-[40px] text-center space-y-4">
-                        <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600 text-xl font-black">
-                           {selectedProduct.deliveryRate}%
-                        </div>
-                        <div className="space-y-1">
-                           <div className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Delivery Success</div>
-                           <div className="text-[9px] font-bold text-slate-400">Shipped to Confirmed ratio</div>
-                        </div>
-                     </div>
-                  </div>
-                </section>
-
-                <section className="p-8 bg-slate-900 rounded-[40px] relative overflow-hidden group">
-                   <div className="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl group-hover:bg-indigo-500/20 transition-all"></div>
-                   <h4 className="text-[9px] font-black text-indigo-400 uppercase tracking-[0.3em] mb-4">Behavioral Analysis</h4>
-                   <p className="text-white/80 text-xs leading-relaxed font-medium">
-                      This product is currently maintaining a <span className="text-emerald-400 font-black">{(selectedProduct.confirmationRate * selectedProduct.deliveryRate / 100).toFixed(0)}% Overall Channel Health</span> score. 
-                      Inventory is depleting at a sustainable rate relative to acquisition cost. Recommendation: 
-                      {selectedProduct.deliveryRate < 60 ? ' Focus on logistics optimization to recover margin bleed.' : ' Scaling marketing spend is advised for high-yield ROI growth.'}
-                   </p>
-                </section>
-              </div>
-
-              <footer className="p-8 border-t bg-slate-50/50 flex gap-4">
-                 <button 
-                  onClick={() => { setSelectedProduct(null); navigate(`/products/edit/${selectedProduct.id}`); }}
-                  className="flex-1 py-5 bg-white border-2 border-slate-200 text-slate-800 rounded-3xl text-[10px] font-black uppercase tracking-[0.3em] hover:border-indigo-600 transition shadow-sm"
-                 >
-                    Modify Blueprint
-                 </button>
-                 <button 
-                  onClick={() => setSelectedProduct(null)}
-                  className="flex-1 py-5 bg-slate-900 text-white rounded-3xl text-[10px] font-black uppercase tracking-[0.3em] shadow-xl hover:bg-emerald-600 transition"
-                 >
-                    Acknowledge Analysis
-                 </button>
-              </footer>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      
       <div className="flex justify-between items-center px-4 py-2 bg-slate-100/50 rounded-2xl border border-slate-200">
          <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
@@ -492,6 +377,115 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts }) => {
             Performance Ledger Sync Active
          </div>
       </div>
+
+      {/* Quick View Modal */}
+      <AnimatePresence>
+        {quickViewProduct && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <Motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setQuickViewProduct(null)} 
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-md" 
+            />
+            <Motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+              className="relative bg-white w-full max-w-5xl rounded-[48px] shadow-3xl overflow-hidden my-auto flex flex-col md:flex-row h-[85vh] md:h-auto max-h-[90vh]"
+            >
+              {/* Image Section */}
+              <div className="w-full md:w-1/2 bg-slate-50 relative group">
+                <img 
+                  src={quickViewProduct.photo} 
+                  alt={quickViewProduct.title} 
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-10 left-10 text-white">
+                  <span className="text-[9px] font-black uppercase tracking-[0.3em] bg-emerald-600 px-4 py-2 rounded-full shadow-2xl mb-4 inline-block">Visual Verification</span>
+                  <h3 className="text-4xl font-black tracking-tighter uppercase italic drop-shadow-lg">{quickViewProduct.title}</h3>
+                </div>
+              </div>
+
+              {/* Data Section */}
+              <div className="w-full md:w-1/2 p-12 flex flex-col space-y-8 overflow-y-auto no-scrollbar">
+                <header className="flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Identifier: {quickViewProduct.sku}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                       <span className="text-[9px] font-black uppercase text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">{quickViewProduct.category}</span>
+                       <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full border ${
+                         quickViewProduct.status === ProductStatus.ACTIVE ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-slate-400 bg-slate-50 border-slate-100'
+                       }`}>{quickViewProduct.status}</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setQuickViewProduct(null)}
+                    className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center border border-slate-100"
+                  >
+                    <i className="fas fa-times"></i>
+                  </button>
+                </header>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100">
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">MSRP / Price</p>
+                    <div className="text-2xl font-black text-slate-800">{quickViewProduct.price.toLocaleString()} <span className="text-[10px] opacity-40">{quickViewProduct.currency}</span></div>
+                  </div>
+                  <div className="bg-indigo-50 p-6 rounded-[32px] border border-indigo-100">
+                    <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest mb-1">Unit Margin</p>
+                    <div className="text-2xl font-black text-indigo-600">+{(quickViewProduct.price - quickViewProduct.costPrice).toLocaleString()} <span className="text-[10px] opacity-40">{quickViewProduct.currency}</span></div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 flex justify-between">
+                    <span>Artifact Narrative</span>
+                    <i className="fas fa-feather-pointed"></i>
+                  </h4>
+                  <p className="text-xs font-medium text-slate-600 leading-relaxed italic">
+                    {quickViewProduct.description || "The strategic narrative for this artifact is currently being finalized."}
+                  </p>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-slate-50">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                    <span className="text-slate-400">Inventory Status</span>
+                    <span className={quickViewProduct.purchasedStock - quickViewProduct.soldStock < 5 ? 'text-red-500' : 'text-emerald-600'}>
+                      {quickViewProduct.purchasedStock - quickViewProduct.soldStock} Units In Stock
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                    <Motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(quickViewProduct.soldStock / (quickViewProduct.purchasedStock || 1)) * 100}%` }}
+                      className="bg-indigo-600 h-full rounded-full"
+                    />
+                  </div>
+                </div>
+
+                <footer className="pt-8 flex gap-3 mt-auto">
+                  <button 
+                    onClick={() => { setQuickViewProduct(null); navigate(`/products/edit/${quickViewProduct.id}`); }}
+                    className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-600 transition-all active:scale-95"
+                  >
+                    Modify Blueprint
+                  </button>
+                  <button 
+                    onClick={() => { setQuickViewProduct(null); navigate(`/products/view/${quickViewProduct.id}`); }}
+                    className="w-14 h-14 bg-slate-50 text-slate-400 hover:text-emerald-600 rounded-2xl flex items-center justify-center transition border border-slate-100 shadow-sm"
+                    title="Deep Analytics"
+                  >
+                    <i className="fas fa-microchip"></i>
+                  </button>
+                </footer>
+              </div>
+            </Motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

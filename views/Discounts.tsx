@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Discount, Product } from '../types';
+import { Discount, Product, User } from '../types';
 
 interface DiscountsProps {
   discounts: Discount[];
   setDiscounts: React.Dispatch<React.SetStateAction<Discount[]>>;
   products: Product[];
+  // Added missing currentUser prop to fix App.tsx error
+  currentUser: User;
 }
 
-const Discounts: React.FC<DiscountsProps> = ({ discounts, setDiscounts, products }) => {
+const Discounts: React.FC<DiscountsProps> = ({ discounts, setDiscounts, products, currentUser }) => {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<Partial<Discount>>({
     name: '',

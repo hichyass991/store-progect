@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Product, ProductStatus } from '../types';
+import { Product, ProductStatus, User, ProductVariant } from '../types';
 import { geminiService } from '../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -9,9 +10,11 @@ const Motion = motion as any;
 interface ProductFormViewProps {
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  defaultCurrency?: string;
+  currentUser: User;
 }
 
-const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts }) => {
+const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts, defaultCurrency = 'SAR', currentUser }) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
@@ -32,7 +35,7 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
     description: '',
     photo: '',
     allPhotos: [],
-    currency: 'SAR',
+    currency: defaultCurrency,
     stockStatus: 'In Stock',
     status: ProductStatus.DRAFT,
     category: '',
@@ -40,7 +43,8 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
     discountType: 'none',
     discountValue: 0,
     confirmationRate: 0,
-    deliveryRate: 0
+    deliveryRate: 0,
+    variants: []
   });
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -49,7 +53,7 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
   useEffect(() => {
     if (isEdit) {
       const existing = products.find(p => p.id === id);
-      if (existing) setFormData(existing);
+      if (existing) setFormData({ ...existing, variants: existing.variants || [] });
     }
   }, [id, isEdit, products]);
 
@@ -101,7 +105,7 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
     setIsCompressing(true);
     try {
       const remainingSlots = 5 - (formData.allPhotos?.length || 0);
-      const filesToProcess = Array.from(files).slice(0, remainingSlots);
+      const filesToProcess = Array.from(files).slice(0, remainingSlots) as File[];
       const uploadPromises = filesToProcess.map(file => compressImage(file));
       const compressedImages = await Promise.all(uploadPromises);
       
@@ -118,15 +122,24 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
       alert("Failed to process one or more images.");
     } finally {
       setIsCompressing(false);
-      // Reset input so the same file can be selected again if deleted
       e.target.value = '';
     }
   };
 
   const generateAI = async () => {
-    if (!formData.title) return alert("Enter a product title first.");
+    if (!formData.title) return alert("Please enter a product title to provide context for the AI strategist.");
     setIsGenerating(true);
-    const desc = await geminiService.generateDescription(formData.title, formData.category || 'Luxury');
+    
+    // Passing rich context for a professional description
+    const desc = await geminiService.generateDescription({
+      title: formData.title,
+      category: formData.category || 'Premium Collection',
+      price: formData.price || 0,
+      currency: formData.currency || 'SAR',
+      sku: formData.sku || 'PENDING',
+      variants: formData.variants
+    });
+
     setFormData(prev => ({ ...prev, description: desc }));
     setIsGenerating(false);
   };
@@ -153,32 +166,56 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
     });
   };
 
+  const addVariant = () => {
+    const newV: ProductVariant = {
+      id: 'var_' + Math.random().toString(36).substr(2, 9),
+      name: 'Size',
+      value: '',
+      sku: `${formData.sku || 'PROD'}-${(formData.variants?.length || 0) + 1}`,
+      price: formData.price || 0,
+      stock: 0
+    };
+    setFormData(prev => ({ ...prev, variants: [...(prev.variants || []), newV] }));
+  };
+
+  const removeVariant = (vid: string) => {
+    setFormData(prev => ({ ...prev, variants: prev.variants?.filter(v => v.id !== vid) || [] }));
+  };
+
+  const updateVariant = (vid: string, field: keyof ProductVariant, val: any) => {
+    setFormData(prev => ({
+      ...prev,
+      variants: prev.variants?.map(v => v.id === vid ? { ...v, [field]: val } : v) || []
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const now = new Date().toLocaleString();
     const finalStock = (formData.purchasedStock || 0) - (formData.soldStock || 0);
     
+    const productToSave: Product = {
+      id: formData.id || 'prod_' + Math.random().toString(36).substr(2, 9),
+      id_num: formData.id_num || '#' + (products.length > 0 ? Math.max(...products.map(p => parseInt(p.id_num.replace('#', '')))) + 1 : 1001),
+      createdAt: formData.createdAt || now,
+      updatedAt: now,
+      costPrice: formData.costPrice || 0,
+      purchasedStock: formData.purchasedStock || 0,
+      soldStock: formData.soldStock || 0,
+      upsellIds: formData.upsellIds || [],
+      discountType: formData.discountType || 'none',
+      discountValue: formData.discountValue || 0,
+      confirmationRate: formData.confirmationRate || 0,
+      deliveryRate: formData.deliveryRate || 0,
+      stock: finalStock >= 0 ? finalStock : 0,
+      variants: formData.variants || [],
+      ...(formData as Product)
+    };
+
     if (isEdit) {
-      setProducts(prev => prev.map(p => p.id === id ? { ...p, ...formData as Product, stock: finalStock >= 0 ? finalStock : 0, updatedAt: now } : p));
+      setProducts(prev => prev.map(p => p.id === id ? productToSave : p));
     } else {
-      const lastIdNum = products.length > 0 ? Math.max(...products.map(p => parseInt(p.id_num.replace('#', '')))) : 1000;
-      const newProduct: Product = {
-        id: 'prod_' + Math.random().toString(36).substr(2, 9),
-        id_num: '#' + (lastIdNum + 1),
-        createdAt: now,
-        updatedAt: now,
-        costPrice: formData.costPrice || 0,
-        purchasedStock: formData.purchasedStock || 0,
-        soldStock: formData.soldStock || 0,
-        upsellIds: formData.upsellIds || [],
-        discountType: formData.discountType || 'none',
-        discountValue: formData.discountValue || 0,
-        confirmationRate: formData.confirmationRate || 0,
-        deliveryRate: formData.deliveryRate || 0,
-        stock: finalStock >= 0 ? finalStock : 0,
-        ...(formData as Product)
-      };
-      setProducts(prev => [newProduct, ...prev]);
+      setProducts(prev => [productToSave, ...prev]);
     }
     navigate('/products');
   };
@@ -304,15 +341,73 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
                   <input type="text" required placeholder="E.g. STUDIO-2024-X" className="w-full bg-slate-50 border-none rounded-3xl px-8 py-5 outline-none font-mono focus:ring-4 focus:ring-emerald-500/10 transition-all font-black text-slate-500" value={formData.sku} onChange={(e) => setFormData(prev => ({ ...prev, sku: e.target.value }))} />
                 </div>
               </section>
-              <section className="space-y-3">
-                <div className="flex justify-between items-center px-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Detailed Artifact Narrative</label>
-                  <button type="button" onClick={generateAI} disabled={isGenerating} className="text-[9px] font-black uppercase text-emerald-600 hover:text-white hover:bg-emerald-600 px-4 py-1.5 rounded-full border border-emerald-600 transition-all disabled:opacity-50 flex items-center gap-2">
-                    <i className={`fas ${isGenerating ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'}`}></i>
-                    Compose with AI
-                  </button>
+              
+              {/* Enhanced Description Field with AI Intelligence */}
+              <section className="space-y-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center px-4 gap-4">
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Detailed Artifact Narrative</label>
+                    <p className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter mt-1 italic">Professional e-commerce descriptions drive 40% higher conversion.</p>
+                  </div>
+                  <Motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="button" 
+                    onClick={generateAI} 
+                    disabled={isGenerating} 
+                    className={`relative overflow-hidden group px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center gap-3 shadow-2xl ${
+                      isGenerating ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-500/20'
+                    }`}
+                  >
+                    <div className={`absolute inset-0 bg-gradient-to-r from-emerald-500 to-indigo-600 opacity-0 group-hover:opacity-20 transition-opacity ${isGenerating ? 'hidden' : ''}`} />
+                    <i className={`fas ${isGenerating ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'} ${isGenerating ? 'text-slate-300' : 'text-emerald-400 group-hover:text-white'}`}></i>
+                    {isGenerating ? 'Analyzing Context...' : 'Craft Strategic Narrative'}
+                    {!isGenerating && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                    )}
+                  </Motion.button>
                 </div>
-                <textarea rows={6} placeholder="Describe the essence of this product..." className="w-full bg-slate-50 border-none rounded-[40px] px-8 py-6 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all leading-relaxed font-bold text-slate-600" value={formData.description} onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}></textarea>
+                
+                <div className="relative group">
+                  <textarea 
+                    rows={8} 
+                    placeholder="Describe the essence of this product..." 
+                    className={`w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 rounded-[40px] px-8 py-8 outline-none focus:ring-8 focus:ring-indigo-500/5 transition-all leading-relaxed font-bold text-slate-600 text-sm placeholder:opacity-40 no-scrollbar ${isGenerating ? 'opacity-40 select-none grayscale' : ''}`} 
+                    value={formData.description} 
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  ></textarea>
+                  
+                  <AnimatePresence>
+                    {isGenerating && (
+                      <Motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white/40 backdrop-blur-[2px] rounded-[40px] z-10"
+                      >
+                         <div className="flex gap-2">
+                           {[0, 1, 2].map(i => (
+                             <Motion.span 
+                               key={i}
+                               animate={{ 
+                                 scale: [1, 1.5, 1],
+                                 backgroundColor: ['#10b981', '#6366f1', '#10b981']
+                               }}
+                               transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                               className="w-2 h-2 rounded-full"
+                             />
+                           ))}
+                         </div>
+                         <p className="text-[10px] font-black text-slate-800 uppercase tracking-[0.4em] ml-2">Nexus AI Strategist is Composing</p>
+                      </Motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="absolute bottom-6 right-8 flex items-center gap-2 pointer-events-none opacity-40 group-focus-within:opacity-100 transition-opacity">
+                     <i className="fas fa-feather-pointed text-[10px] text-slate-400"></i>
+                     <span className="text-[9px] font-black text-slate-300 uppercase">{formData.description?.length || 0} Chars</span>
+                  </div>
+                </div>
               </section>
             </div>
           )}
@@ -366,6 +461,109 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
                   </div>
                 </div>
               </div>
+
+              {/* Product Variants Section */}
+              <div className="bg-white p-10 rounded-[48px] border-2 border-slate-100 space-y-8 shadow-sm">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                      <i className="fas fa-layer-group text-indigo-500"></i> Product Variants
+                    </h4>
+                    <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mt-1">Manage variations like Color, Size, or Material</p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={addVariant}
+                    className="bg-indigo-600 text-white px-6 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-lg hover:scale-105 transition"
+                  >
+                    + Add Variant
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {formData.variants && formData.variants.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="text-[8px] font-black text-slate-400 uppercase tracking-widest border-b">
+                            <th className="pb-4 px-2">Variation Name</th>
+                            <th className="pb-4 px-2">Option Value</th>
+                            <th className="pb-4 px-2">SKU</th>
+                            <th className="pb-4 px-2 text-right">Price ({formData.currency})</th>
+                            <th className="pb-4 px-2 text-right">In Stock</th>
+                            <th className="pb-4 px-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {formData.variants.map((v) => (
+                            <tr key={v.id} className="group hover:bg-slate-50/50 transition-colors">
+                              <td className="py-4 px-2">
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. Size"
+                                  className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 outline-none focus:text-indigo-600"
+                                  value={v.name}
+                                  onChange={(e) => updateVariant(v.id, 'name', e.target.value)}
+                                />
+                              </td>
+                              <td className="py-4 px-2">
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g. Large"
+                                  className="w-full bg-transparent border-none text-[11px] font-bold text-slate-500 outline-none focus:text-slate-800"
+                                  value={v.value}
+                                  onChange={(e) => updateVariant(v.id, 'value', e.target.value)}
+                                />
+                              </td>
+                              <td className="py-4 px-2">
+                                <input 
+                                  type="text" 
+                                  className="w-full bg-transparent border-none text-[10px] font-mono font-black text-slate-400 outline-none"
+                                  value={v.sku}
+                                  onChange={(e) => updateVariant(v.id, 'sku', e.target.value)}
+                                />
+                              </td>
+                              <td className="py-4 px-2 text-right">
+                                <input 
+                                  type="number" 
+                                  className="w-20 bg-transparent border-none text-right text-[11px] font-black text-emerald-600 outline-none"
+                                  value={v.price}
+                                  onChange={(e) => updateVariant(v.id, 'price', parseFloat(e.target.value))}
+                                />
+                              </td>
+                              <td className="py-4 px-2 text-right">
+                                <input 
+                                  type="number" 
+                                  className="w-16 bg-transparent border-none text-right text-[11px] font-black text-slate-800 outline-none"
+                                  value={v.stock}
+                                  onChange={(e) => updateVariant(v.id, 'stock', parseInt(e.target.value))}
+                                />
+                              </td>
+                              <td className="py-4 px-2 text-right">
+                                <button 
+                                  type="button"
+                                  onClick={() => removeVariant(v.id)}
+                                  className="w-8 h-8 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                >
+                                  <i className="fas fa-trash-alt text-[10px]"></i>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-12 text-center bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-100">
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto text-slate-200 mb-3 shadow-sm">
+                        <i className="fas fa-plus"></i>
+                      </div>
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">No variation configurations defined</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="bg-indigo-600 p-10 rounded-[48px] space-y-10 shadow-2xl shadow-indigo-100">
                  <h4 className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.4em] flex items-center gap-2">
                     <i className="fas fa-chart-bar"></i> Performance Benchmarks (Historical)
