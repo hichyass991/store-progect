@@ -24,6 +24,7 @@ import Invoices from './views/Invoices';
 import SupportDesk from './views/SupportDesk';
 import AgentSupport from './views/AgentSupport';
 import { Product, Lead, AbandonedCart, Store, Category, Discount, Sheet, GoogleConfig, User, UserRole, Payment, SupportRequest, SupportReply } from './types';
+import { supabaseService } from './services/supabaseService';
 
 const App: React.FC = () => {
   const getSafeLocalStorage = <T,>(key: string, defaultValue: T): T => {
@@ -55,17 +56,6 @@ const App: React.FC = () => {
       password: 'admin123',
       role: UserRole.ADMIN, 
       avatar: 'https://ui-avatars.com/api/?name=Hicham+Idali&background=4f46e5&color=fff',
-      isActive: true,
-      isApproved: true,
-      createdAt: new Date().toLocaleDateString()
-    },
-    { 
-      id: 'u_2', 
-      name: 'Agent Sarah', 
-      email: 'agent@gwapashop.pro', 
-      password: 'agent123',
-      role: UserRole.AGENT, 
-      avatar: 'https://ui-avatars.com/api/?name=Agent+Sarah&background=10b981&color=fff',
       isActive: true,
       isApproved: true,
       createdAt: new Date().toLocaleDateString()
@@ -141,7 +131,6 @@ const App: React.FC = () => {
 
   const handleReplyToSupportRequest = (requestId: string, message: string) => {
     if (!currentUser || currentUser.role !== UserRole.ADMIN) return;
-
     const newReply: SupportReply = {
       id: 'rep_' + Math.random().toString(36).substr(2, 9),
       adminId: currentUser.id,
@@ -149,20 +138,10 @@ const App: React.FC = () => {
       message,
       timestamp: new Date().toLocaleString()
     };
-
-    setSupportRequests(prev => prev.map(req => {
-      if (req.id === requestId) {
-        return {
-          ...req,
-          replies: [...(req.replies || []), newReply],
-          status: 'resolved' // Automatically mark as resolved when admin replies
-        };
-      }
-      return req;
-    }));
+    setSupportRequests(prev => prev.map(req => req.id === requestId ? { ...req, replies: [...(req.replies || []), newReply], status: 'resolved' } : req));
   };
 
-  const handleRegister = (userData: Omit<User, 'id' | 'avatar' | 'isActive' | 'isApproved' | 'createdAt'>) => {
+  const handleRegister = async (userData: Omit<User, 'id' | 'avatar' | 'isActive' | 'isApproved' | 'createdAt'>) => {
     const existing = users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
     if (existing) {
       alert("This email is already registered in the Gwapashop core.");
@@ -174,9 +153,12 @@ const App: React.FC = () => {
       ...userData,
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name)}&background=random&color=fff`,
       isActive: true,
-      isApproved: false, // New users MUST be approved by admin
+      isApproved: false,
       createdAt: new Date().toLocaleDateString()
     };
+
+    // Sync to Supabase
+    await supabaseService.syncUser(newUser);
 
     setUsers(prev => [...prev, newUser]);
   };

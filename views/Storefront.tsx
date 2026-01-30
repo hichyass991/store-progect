@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Product, Lead, LeadStatus, AbandonedCart, Sheet } from '../types';
 import { syncService } from '../services/syncService';
+import { supabaseService } from '../services/supabaseService';
 
 interface StorefrontProps {
   products: Product[];
@@ -17,10 +19,18 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
   const product = products.find(p => p.id === productId);
 
   const [mainImg, setMainImg] = useState('');
-  const [customer, setCustomer] = useState({ name: '', phone: '' });
+  const [customer, setCustomer] = useState({ 
+    firstName: '', 
+    lastName: '', 
+    email: '', 
+    phone: '', 
+    address: '', 
+    city: '', 
+    zipCode: '' 
+  });
   const [isOrdered, setIsOrdered] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Upsell handling
   const [selectedUpsells, setSelectedUpsells] = useState<Set<string>>(new Set());
 
   const upsellProducts = useMemo(() => {
@@ -42,12 +52,12 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
   }, [product]);
 
   useEffect(() => {
-    if (customer.name.length > 2 || customer.phone.length > 5) {
+    if (customer.firstName.length > 2 || customer.phone.length > 5) {
       const timer = setTimeout(() => {
         const id = 'abc_' + Math.random().toString(36).substr(2, 5);
         const cart: AbandonedCart = {
           id,
-          name: customer.name,
+          name: `${customer.firstName} ${customer.lastName}`,
           phone: customer.phone,
           product_id: productId!,
           timestamp: new Date().toLocaleString()
@@ -87,26 +97,27 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
 
   const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customer.name || !customer.phone) return alert("Please fill in your details.");
+    if (!customer.firstName || !customer.lastName || !customer.phone || !customer.address || !customer.city) {
+      return alert("Please fill in all required delivery details.");
+    }
 
+    setIsSubmitting(true);
     const now = new Date().toLocaleString();
-    const nameParts = customer.name.trim().split(/\s+/);
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    const fullName = `${customer.firstName} ${customer.lastName}`;
 
     const newLead: Lead = {
       id: 'lead_' + Math.random().toString(36).substr(2, 9),
       id_num: '#' + (Math.floor(Math.random() * 9000) + 1000),
-      name: customer.name,
-      firstName: firstName,
-      lastName: lastName,
-      email: '',
+      name: fullName,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      email: customer.email,
       phone: customer.phone,
       preferredContact: 'phone',
       company: '',
       country: '',
       region: '',
-      city: '',
+      city: customer.city,
       product_id: productId!,
       status: LeadStatus.NEW,
       source: 'Storefront',
@@ -114,12 +125,20 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
       updatedAt: now
     };
 
-    // --- AUTOMATIC CLOUD SYNC ---
+    // --- SUPABASE CLOUD SYNC ---
+    await supabaseService.syncLead(newLead, product, {
+      address: customer.address,
+      city: customer.city,
+      zipCode: customer.zipCode,
+      email: customer.email,
+      totalAmount: totalPrice,
+      upsells: Array.from(selectedUpsells)
+    });
+
+    // --- GOOGLE SHEETS SYNC ---
     const targetSheet = sheets.find(s => s.productIds.includes(productId!) && s.googleSheetUrl);
     if (targetSheet && targetSheet.googleSheetUrl) {
       const result = await syncService.pushLead(targetSheet.googleSheetUrl, newLead, product);
-      
-      // Log the sync
       const log = {
         id: 'log_' + Math.random().toString(36).substr(2, 5),
         timestamp: now,
@@ -127,15 +146,12 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
         status: result.success ? 'success' as const : 'failure' as const,
         message: result.message
       };
-
-      setSheets(prev => prev.map(s => s.id === targetSheet.id ? {
-        ...s,
-        syncLogs: [log, ...(s.syncLogs || [])].slice(0, 10)
-      } : s));
+      setSheets(prev => prev.map(s => s.id === targetSheet.id ? { ...s, syncLogs: [log, ...(s.syncLogs || [])].slice(0, 10) } : s));
     }
     
     setLeads(prev => [newLead, ...prev]);
     setAbandonedCarts(prev => prev.filter(c => c.phone !== customer.phone));
+    setIsSubmitting(false);
     setIsOrdered(true);
   };
 
@@ -146,7 +162,7 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
           <i className="fas fa-check"></i>
         </div>
         <h2 className="text-4xl font-black text-slate-800 mb-2">Order Confirmed!</h2>
-        <p className="text-slate-500 max-w-md mb-8">Thank you for your purchase. Our team will contact you shortly to verify your delivery details.</p>
+        <p className="text-slate-500 max-w-md mb-8">Thank you for your purchase. Your order is being processed and will be shipped to {customer.city} shortly.</p>
         <button onClick={() => setIsOrdered(false)} className="px-12 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition">Done</button>
       </div>
     );
@@ -160,7 +176,7 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
             <i className="fas fa-shopping-bag"></i> GWAPASHOP.
           </div>
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-4 py-1.5 rounded-full shadow-sm border">
-            Official Store
+            Official Secure Store
           </div>
         </nav>
 
@@ -192,13 +208,10 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
               <span className="text-[10px] font-black text-emerald-600 tracking-[0.2em] uppercase bg-emerald-50 px-4 py-2 rounded-full inline-block mb-4">
                 {product.category}
               </span>
-              <h1 className="text-5xl font-black text-slate-900 leading-[0.9] tracking-tighter mb-4">{product.title}</h1>
+              <h1 className="text-4xl font-black text-slate-900 leading-[1] tracking-tighter mb-4">{product.title}</h1>
               <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-black text-emerald-600">{product.price.toFixed(2)}</span>
+                <span className="text-4xl font-black text-emerald-600">{product.price.toFixed(2)}</span>
                 <span className="text-lg font-bold text-slate-400">{product.currency}</span>
-                {product.backupPrice && (
-                  <span className="text-xl text-slate-300 line-through ml-2">{product.backupPrice.toFixed(2)}</span>
-                )}
               </div>
             </div>
 
@@ -234,55 +247,109 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
                     </div>
                   ))}
                 </div>
-                {selectedUpsells.size > 0 && (
-                  <div className="pt-4 border-t border-slate-50 flex justify-between items-center animate-in fade-in slide-in-from-top-2 duration-300">
-                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Bundle Price</span>
-                     <span className="text-xl font-black text-indigo-600">{totalPrice.toFixed(2)} {product.currency}</span>
-                  </div>
-                )}
               </div>
             )}
 
             <div className="bg-white p-8 rounded-[40px] border-2 border-emerald-500 shadow-2xl shadow-emerald-100 space-y-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                 <i className="fas fa-bolt text-4xl text-emerald-600"></i>
-              </div>
-              <h3 className="text-xl font-black text-slate-800 tracking-tight">Express Order</h3>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Pay Cash on Delivery</p>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight">Express Checkout</h3>
               
               <form onSubmit={handleOrder} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Your Full Name</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">First Name</label>
+                    <input 
+                      type="text" required placeholder="John" 
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                      value={customer.firstName}
+                      onChange={(e) => setCustomer(prev => ({ ...prev, firstName: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Last Name</label>
+                    <input 
+                      type="text" required placeholder="Doe" 
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                      value={customer.lastName}
+                      onChange={(e) => setCustomer(prev => ({ ...prev, lastName: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Email Address (Optional)</label>
                   <input 
-                    type="text" required placeholder="Ex: John Doe" 
-                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-4 rounded-2xl outline-none transition font-medium"
-                    value={customer.name}
-                    onChange={(e) => setCustomer(prev => ({ ...prev, name: e.target.value }))}
+                    type="email" placeholder="john@example.com" 
+                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                    value={customer.email}
+                    onChange={(e) => setCustomer(prev => ({ ...prev, email: e.target.value }))}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Phone Number</label>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Phone Number</label>
                   <input 
                     type="tel" required placeholder="06XXXXXXXX" 
-                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-4 rounded-2xl outline-none transition font-bold"
+                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-bold text-sm"
                     value={customer.phone}
                     onChange={(e) => setCustomer(prev => ({ ...prev, phone: e.target.value }))}
                   />
                 </div>
-                <button type="submit" className="w-full bg-emerald-600 text-white py-5 rounded-3xl font-black text-xl shadow-2xl shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all">
-                  CONFIRM ORDER
-                </button>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Street Address</label>
+                  <input 
+                    type="text" required placeholder="Street Name, Building No." 
+                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                    value={customer.address}
+                    onChange={(e) => setCustomer(prev => ({ ...prev, address: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">City</label>
+                    <input 
+                      type="text" required placeholder="Casablanca" 
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                      value={customer.city}
+                      onChange={(e) => setCustomer(prev => ({ ...prev, city: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Zip Code</label>
+                    <input 
+                      type="text" placeholder="20000" 
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                      value={customer.zipCode}
+                      onChange={(e) => setCustomer(prev => ({ ...prev, zipCode: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <div className="flex justify-between items-center mb-4 px-2">
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Order Total:</span>
+                    <span className="text-2xl font-black text-emerald-600">{totalPrice.toFixed(2)} {product.currency}</span>
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="w-full bg-emerald-600 text-white py-5 rounded-2xl font-black text-lg shadow-2xl shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : 'PLACE COD ORDER'}
+                  </button>
+                </div>
               </form>
               <div className="flex items-center justify-center gap-4 text-emerald-600/50">
-                <i className="fas fa-shipping-fast"></i>
-                <span className="text-[10px] font-black uppercase tracking-widest">Free Express Shipping Today</span>
+                <i className="fas fa-shield-alt"></i>
+                <span className="text-[10px] font-black uppercase tracking-widest">Secure Cash On Delivery</span>
               </div>
             </div>
 
             <div className="prose prose-slate max-w-none">
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full border-2 border-slate-100 flex items-center justify-center"><i className="fas fa-info text-[6px]"></i></div>
-                Product Description
+                Product Details
               </h4>
               <p className="text-slate-600 text-sm leading-relaxed">{product.description}</p>
             </div>
