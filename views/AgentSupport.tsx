@@ -51,7 +51,8 @@ const AgentSupport: React.FC<AgentSupportProps> = ({ supportRequests, onSendRequ
     if (!files) return;
     setIsUploading(true);
     
-    const fileArray = Array.from(files);
+    // Explicitly cast to File[] to avoid unknown type inference errors
+    const fileArray = Array.from(files) as File[];
     for (const file of fileArray) {
       if (file.type.startsWith('image/')) {
         const compressed = await compressImage(file);
