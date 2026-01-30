@@ -1,5 +1,5 @@
 
-import { Lead, Product, User, LeadStatus, UserRole, Category, Discount, ProductStatus, AbandonedCart, Sheet } from '../types';
+import { Lead, Product, User, LeadStatus, UserRole, Category, Discount, ProductStatus, AbandonedCart, Sheet, Store } from '../types';
 
 const SUPABASE_URL = 'https://dvwcxwahmhrskzyckmye.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_J4WmRMrLevkj25MyO9azyA_sSTOH0Ka';
@@ -12,6 +12,48 @@ const headers = {
 };
 
 export const supabaseService = {
+  // --- STORES ---
+  async getStores(): Promise<Store[]> {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/stores?select=*&order=created_at.desc`, { method: 'GET', headers });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        logo: s.logo,
+        banner: s.banner,
+        sections: s.sections || [],
+        social: s.social || { wa: '', ig: '', fb: '' },
+        createdAt: s.created_at
+      }));
+    } catch (e) { return []; }
+  },
+
+  async syncStore(s: Store) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/stores?on_conflict=id`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          id: s.id,
+          name: s.name,
+          logo: s.logo,
+          banner: s.banner,
+          sections: s.sections,
+          social: s.social,
+          created_at: s.createdAt
+        })
+      });
+    } catch (e) { console.error("Store Sync Error:", e); }
+  },
+
+  async deleteStore(id: string) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/stores?id=eq.${id}`, { method: 'DELETE', headers });
+    } catch (e) { console.error(e); }
+  },
+
   // --- LEADS ---
   async getLeads(): Promise<Lead[]> {
     try {
@@ -84,8 +126,8 @@ export const supabaseService = {
         id_num: p.id_num,
         title: p.title,
         sku: p.sku,
-        price: p.price,
-        costPrice: p.cost_price,
+        price: Number(p.price),
+        costPrice: Number(p.cost_price),
         stock: p.stock,
         purchasedStock: p.purchased_stock,
         soldStock: p.sold_stock,
@@ -185,7 +227,7 @@ export const supabaseService = {
         id: d.id,
         name: d.name,
         type: d.type,
-        value: d.value,
+        value: Number(d.value),
         appliesTo: d.applies_to,
         status: d.status,
         createdAt: d.created_at
@@ -211,7 +253,6 @@ export const supabaseService = {
     } catch (e) { console.error(e); }
   },
 
-  // Fix: Added missing deleteDiscount method to resolve error in views/Discounts.tsx
   async deleteDiscount(id: string) {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/discounts?id=eq.${id}`, { method: 'DELETE', headers });

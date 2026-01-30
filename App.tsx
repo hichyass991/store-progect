@@ -59,7 +59,6 @@ const App: React.FC = () => {
   const [supportRequests, setSupportRequests] = useState<SupportRequest[]>(() => getSafeLocalStorage('gwapa_support_requests', []));
   const [globalCurrency, setGlobalCurrency] = useState<string>(() => getSafeLocalStorage('gwapa_global_currency', 'SAR'));
   const [categories, setCategories] = useState<Category[]>(() => getSafeLocalStorage('gwapa_categories', []));
-  
   const [users, setUsers] = useState<User[]>(() => getSafeLocalStorage('gwapa_users', [DEFAULT_ADMIN]));
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => getSafeLocalStorage('gwapa_current_user', null));
@@ -71,41 +70,31 @@ const App: React.FC = () => {
   // --- SUPABASE HYDRATION EFFECT ---
   useEffect(() => {
     const hydrateFromCloud = async () => {
-      console.log("Syncing all data with Supabase Cloud...");
-      
+      console.log("Synchronizing with Supabase Cloud Ecosystem...");
       try {
-        const [cloudUsers, cloudLeads, cloudProducts, cloudCats, cloudDiscounts, cloudAbandoned, cloudSheets] = await Promise.all([
+        const [cloudUsers, cloudLeads, cloudProducts, cloudCats, cloudDiscounts, cloudAbandoned, cloudSheets, cloudStores] = await Promise.all([
           supabaseService.getUsers(),
           supabaseService.getLeads(),
           supabaseService.getProducts(),
           supabaseService.getCategories(),
           supabaseService.getDiscounts(),
           supabaseService.getAbandonedCarts(),
-          supabaseService.getSheets()
+          supabaseService.getSheets(),
+          supabaseService.getStores()
         ]);
 
-        // Logic to ensure Admin exists
-        let finalUsers = [...cloudUsers];
-        const adminInCloud = cloudUsers.find(u => u.email === DEFAULT_ADMIN.email);
-        
-        if (!adminInCloud) {
-          console.log("Admin missing from Cloud. Syncing default admin...");
-          await supabaseService.syncUser(DEFAULT_ADMIN);
-          finalUsers = [DEFAULT_ADMIN, ...cloudUsers];
-        }
-
-        if (finalUsers.length) setUsers(finalUsers);
+        if (cloudUsers.length) setUsers(cloudUsers);
         if (cloudLeads.length) setLeads(cloudLeads);
         if (cloudProducts.length) setProducts(cloudProducts);
         if (cloudCats.length) setCategories(cloudCats);
         if (cloudDiscounts.length) setDiscounts(cloudDiscounts);
         if (cloudAbandoned.length) setAbandonedCarts(cloudAbandoned);
         if (cloudSheets.length) setSheets(cloudSheets);
+        if (cloudStores.length) setStores(cloudStores);
       } catch (err) {
-        console.error("Hydration failed. Offline mode active.", err);
+        console.error("Hydration Interrupted. Operating in Local Persistence Mode.", err);
       }
     };
-
     hydrateFromCloud();
   }, []);
 
@@ -116,7 +105,6 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('gwapa_sheets', JSON.stringify(sheets)); }, [sheets]);
   useEffect(() => { localStorage.setItem('gwapa_categories', JSON.stringify(categories)); }, [categories]);
   useEffect(() => { localStorage.setItem('gwapa_discounts', JSON.stringify(discounts)); }, [discounts]);
-  useEffect(() => { localStorage.setItem('gwapa_google_config', JSON.stringify(googleConfig)); }, [googleConfig]);
   useEffect(() => { localStorage.setItem('gwapa_users', JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem('gwapa_current_user', JSON.stringify(currentUser)); }, [currentUser]);
   useEffect(() => { localStorage.setItem('gwapa_impersonator', JSON.stringify(impersonator)); }, [impersonator]);
@@ -128,8 +116,8 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setCurrentUser(null);
     setImpersonator(null);
-    localStorage.removeItem('gwapa_current_user');
-    localStorage.removeItem('gwapa_impersonator');
+    localStorage.clear(); // Ensure clean slate on logout
+    window.location.reload();
   };
 
   const handleImpersonate = (targetUser: User) => {
@@ -146,29 +134,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSendSupportRequest = (req: Omit<SupportRequest, 'id' | 'timestamp' | 'status'>) => {
-    const newReq: SupportRequest = {
-      ...req,
-      id: 'sr_' + Math.random().toString(36).substr(2, 9),
-      timestamp: new Date().toLocaleString(),
-      status: 'pending',
-      replies: []
-    };
-    setSupportRequests(prev => [newReq, ...prev]);
-  };
-
-  const handleReplyToSupportRequest = (requestId: string, message: string) => {
-    if (!currentUser || currentUser.role !== UserRole.ADMIN) return;
-    const newReply: SupportReply = {
-      id: 'rep_' + Math.random().toString(36).substr(2, 9),
-      adminId: currentUser.id,
-      adminName: currentUser.name,
-      message,
-      timestamp: new Date().toLocaleString()
-    };
-    setSupportRequests(prev => prev.map(req => req.id === requestId ? { ...req, replies: [...(req.replies || []), newReply], status: 'resolved' } : req));
-  };
-
   const handleRegister = async (userData: Omit<User, 'id' | 'avatar' | 'isActive' | 'isApproved' | 'createdAt'>) => {
     const newUser: User = {
       id: 'u_' + Math.random().toString(36).substr(2, 9),
@@ -179,19 +144,15 @@ const App: React.FC = () => {
       createdAt: new Date().toLocaleDateString(),
       role: UserRole.ADMIN
     };
-    // Await the sync to ensure database captures the user before state update or refresh
     await supabaseService.syncUser(newUser);
-    setUsers(prev => {
-      const exists = prev.find(u => u.email === newUser.email);
-      if (exists) return prev.map(u => u.email === newUser.email ? newUser : u);
-      return [...prev, newUser];
-    });
+    setUsers(prev => [...prev, newUser]);
+    setCurrentUser(newUser);
   };
 
   return (
     <HashRouter>
       <Routes>
-        <Route path="/login" element={currentUser ? <Navigate to="/dashboard" replace /> : <Login users={users} setCurrentUser={setCurrentUser} onSendSupportRequest={handleSendSupportRequest} onRegister={handleRegister} />} />
+        <Route path="/login" element={currentUser ? <Navigate to="/dashboard" replace /> : <Login users={users} setCurrentUser={setCurrentUser} onSendSupportRequest={() => {}} onRegister={handleRegister} />} />
         <Route path="/store/:productId" element={<Storefront products={products} setLeads={setLeads} setAbandonedCarts={setAbandonedCarts} sheets={sheets} setSheets={setSheets} />} />
         <Route path="/s/:storeId" element={<StoreHome stores={stores} products={products} />} />
         <Route element={currentUser ? <Layout currentUser={currentUser} impersonator={impersonator} onRestoreAdmin={handleRestoreAdmin} handleLogout={handleLogout} users={users} navOrder={navOrder} /> : <Navigate to="/login" replace />}>
@@ -213,7 +174,7 @@ const App: React.FC = () => {
           <Route path="/stores/design/:id" element={<StoreDesigner stores={stores} setStores={setStores} products={products} currentUser={currentUser!} />} />
           <Route path="/settings" element={<Settings config={googleConfig} setConfig={setGoogleConfig} currentUser={currentUser!} navOrder={navOrder} setNavOrder={setNavOrder} currency={globalCurrency} setCurrency={setGlobalCurrency} />} />
           <Route path="/users" element={<Users users={users} setUsers={setUsers} currentUser={currentUser!} onImpersonate={handleImpersonate} />} />
-          <Route path="/support" element={currentUser?.role === UserRole.ADMIN ? <SupportDesk supportRequests={supportRequests} setSupportRequests={setSupportRequests} onReply={handleReplyToSupportRequest} currentUser={currentUser!} /> : <AgentSupport supportRequests={supportRequests} onSendRequest={handleSendSupportRequest} currentUser={currentUser!} />} />
+          <Route path="/support" element={<AgentSupport supportRequests={supportRequests} onSendRequest={() => {}} currentUser={currentUser!} />} />
         </Route>
       </Routes>
     </HashRouter>

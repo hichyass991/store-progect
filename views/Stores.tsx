@@ -1,11 +1,12 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, User } from '../types';
+import { supabaseService } from '../services/supabaseService';
 
 interface StoresProps {
   stores: Store[];
   setStores: React.Dispatch<React.SetStateAction<Store[]>>;
-  // Added missing currentUser prop to fix App.tsx error
   currentUser: User;
 }
 
@@ -20,7 +21,7 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
     setIsAdding(true);
   };
 
-  const handleCustomizeStore = () => {
+  const handleCustomizeStore = async () => {
     if (!newStoreName.trim()) {
       alert("Please enter a store name.");
       return;
@@ -36,19 +37,24 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
       createdAt: new Date().toLocaleDateString()
     };
     
+    // Cloud Sync
+    await supabaseService.syncStore(newStore);
+    
     setStores(prev => [newStore, ...prev]);
     setCustomizingStore(newStore);
     setIsAdding(false);
     setNewStoreName('');
   };
 
-  const deleteStore = (id: string) => {
+  const deleteStore = async (id: string) => {
     if (window.confirm('Delete this store? All designs will be lost.')) {
+      await supabaseService.deleteStore(id);
       setStores(prev => prev.filter(s => s.id !== id));
     }
   };
 
-  const saveCustomization = (updatedStore: Store) => {
+  const saveCustomization = async (updatedStore: Store) => {
+    await supabaseService.syncStore(updatedStore);
     setStores(prev => prev.map(s => s.id === updatedStore.id ? updatedStore : s));
     setCustomizingStore(null);
   };
@@ -192,7 +198,7 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
             
             <div className="flex-1 p-8 overflow-y-auto space-y-8">
               <section className="space-y-4">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Brand Logo (Image overrides name)</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Brand Logo</label>
                 <div className="aspect-video bg-slate-50 rounded-3xl border-4 border-dashed border-slate-100 flex flex-col items-center justify-center p-6 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/20 transition group relative overflow-hidden">
                   {customizingStore.logo ? (
                     <img src={customizingStore.logo} alt="" className="w-full h-full object-contain" />
@@ -214,7 +220,6 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           const result = ev.target?.result as string;
-                          // Use functional update to ensure correct type narrowing in closures
                           setCustomizingStore(prev => prev ? { ...prev, logo: result } : null);
                         };
                         reader.readAsDataURL(file);
@@ -231,7 +236,6 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
                     type="text" 
                     className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-4 rounded-2xl outline-none transition font-bold"
                     value={customizingStore.name}
-                    // Use functional update to ensure correct type narrowing in closures
                     onChange={(e) => setCustomizingStore(prev => prev ? { ...prev, name: e.target.value } : null)}
                   />
                 </div>
@@ -246,18 +250,7 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
                       type="text" placeholder="WhatsApp Number" 
                       className="bg-transparent flex-1 outline-none text-xs font-bold"
                       value={customizingStore.social.wa}
-                      // Use functional update to ensure correct type narrowing in closures
                       onChange={(e) => setCustomizingStore(prev => prev ? { ...prev, social: { ...prev.social, wa: e.target.value } } : null)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl group focus-within:ring-2 focus-within:ring-pink-500 transition-all">
-                    <i className="fab fa-instagram text-pink-500 text-lg"></i>
-                    <input 
-                      type="text" placeholder="Instagram Username" 
-                      className="bg-transparent flex-1 outline-none text-xs font-bold"
-                      value={customizingStore.social.ig}
-                      // Use functional update to ensure correct type narrowing in closures
-                      onChange={(e) => setCustomizingStore(prev => prev ? { ...prev, social: { ...prev.social, ig: e.target.value } } : null)}
                     />
                   </div>
                 </div>
@@ -272,7 +265,7 @@ const Stores: React.FC<StoresProps> = ({ stores, setStores, currentUser }) => {
                 Discard
               </button>
               <button 
-                onClick={() => saveCustomization(customizingStore)}
+                onClick={() => customizingStore && saveCustomization(customizingStore)}
                 className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:opacity-90 transition active:scale-[0.98]"
               >
                 Save & Update Store
