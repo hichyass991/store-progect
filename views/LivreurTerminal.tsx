@@ -20,11 +20,11 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderNote, setOrderNote] = useState('');
 
-  // IMPORTANT: Only show orders assigned to THIS specific delivery driver
+  // Scanned orders are those in processing, shipped or confirmed that the livreur is handling
   const scannedOrders = useMemo(() => {
     return leads.filter(l => 
       (l.status === LeadStatus.SHIPPED || l.status === LeadStatus.CONFIRMED || l.status === LeadStatus.PROCESSING) &&
-      l.assignedTo === currentUser.id
+      (l.assignedTo === currentUser.id || !l.assignedTo) // Show his orders or unassigned ones for claiming
     );
   }, [leads, currentUser.id]);
 
@@ -35,55 +35,44 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
     setView('scan');
   };
 
-  const handleScanSimulation = async () => {
+  const handleScanSimulation = () => {
     setIsProcessing(true);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1200));
-
-    // Find the lead in the master list that is ready for shipment and matches the ID
-    const target = leads.find(l => 
-      (l.id_num.includes(manualId) || l.id_num === '#' + manualId) &&
-      (l.status === LeadStatus.CONFIRMED || l.status === LeadStatus.SHIPPED)
-    );
-    
-    if (target) {
-        // AUTO-ASSIGN: Claim the order for this livreur
-        const updatedLead = { 
-          ...target, 
-          status: LeadStatus.PROCESSING, // Move to processing stage for the livreur
-          assignedTo: currentUser.id,
-          updatedAt: new Date().toLocaleString() 
-        };
+    setTimeout(() => {
+        const shippedLeads = leads.filter(l => l.status === LeadStatus.SHIPPED || l.status === LeadStatus.CONFIRMED || l.status === LeadStatus.PROCESSING);
+        const target = shippedLeads.find(l => l.id_num.includes(manualId) || l.id_num === '#' + manualId);
         
-        setLeads(prev => prev.map(l => l.id === target.id ? updatedLead : l));
-        await supabaseService.syncLead(updatedLead, products.find(p => p.id === target.product_id));
-        
-        setSelectedLeadId(target.id);
-        setManualId('');
-        setView('detail');
-    } else {
-        alert("Order not found or already assigned to another driver. Please verify with dispatch.");
-    }
-    setIsProcessing(false);
+        if (target) {
+            setSelectedLeadId(target.id);
+            setManualId('');
+            setView('detail');
+        } else {
+            alert("Order not found or not ready for dispatch.");
+        }
+        setIsProcessing(false);
+    }, 1200);
   };
 
   const handleUpdateStatus = async (status: LeadStatus) => {
     if (!selectedLead) return;
     setIsProcessing(true);
     
+    // In a real app, we'd save the note to a separate field or lead metadata
     const updatedLead = { 
       ...selectedLead, 
       status, 
+      assignedTo: currentUser.id,
       updatedAt: new Date().toLocaleString() 
     };
     
     setLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
     await supabaseService.syncLead(updatedLead, product, { delivery_note: orderNote });
     
-    setIsProcessing(false);
-    setOrderNote('');
-    setSelectedLeadId(null);
-    setView('list');
+    setTimeout(() => {
+        setIsProcessing(false);
+        setOrderNote('');
+        setSelectedLeadId(null);
+        setView('list');
+    }, 500);
   };
 
   return (
@@ -91,15 +80,15 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
       <header className="p-8 sticky top-0 bg-slate-950/80 backdrop-blur-xl border-b border-white/5 z-40 flex justify-between items-center">
          <div>
             <h2 className="text-2xl font-black italic uppercase tracking-tighter">Fleet Console</h2>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mt-1">Personnel: {currentUser.name}</p>
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mt-1">Livreur: {currentUser.name}</p>
          </div>
          <div className="flex items-center gap-3">
             <div className="text-right">
-               <p className="text-[8px] font-black text-slate-500 uppercase">My Active Manifest</p>
-               <p className="text-sm font-black text-emerald-500">{scannedOrders.length} ORDERS</p>
+               <p className="text-[8px] font-black text-slate-500 uppercase">Active Load</p>
+               <p className="text-sm font-black text-emerald-500">{scannedOrders.length} PCS</p>
             </div>
             <div className="w-10 h-10 rounded-2xl bg-slate-900 border border-white/10 flex items-center justify-center text-emerald-500 shadow-xl">
-               <i className="fas fa-truck-ramp-box"></i>
+               <i className="fas fa-route"></i>
             </div>
          </div>
       </header>
@@ -115,11 +104,8 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
               className="space-y-6"
             >
                <div className="flex justify-between items-center px-2">
-                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Scanned Inventory</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span className="text-[8px] font-black text-slate-400 uppercase">Personalized Ledger Active</span>
-                  </div>
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Manifest Ledger</h3>
+                  <button className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Optimized Route</button>
                </div>
 
                {scannedOrders.length > 0 ? (
@@ -138,11 +124,10 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                                  </div>
                                  <div>
                                     <h4 className="font-black text-base italic leading-tight">{l.name}</h4>
-                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">{l.city}</p>
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">{l.city || 'Standard Sector'}</p>
                                     <div className="flex items-center gap-2 mt-2">
-                                       <span className={`text-[8px] font-black px-2 py-0.5 rounded ${
-                                          l.status === 'delivered' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-indigo-500/20 text-indigo-400'
-                                       }`}>{l.status}</span>
+                                       <span className="text-[10px] font-black text-emerald-500">{p?.price} {p?.currency}</span>
+                                       <span className="w-1 h-1 rounded-full bg-slate-700"></span>
                                        <span className="text-[8px] font-bold text-slate-600 font-mono">{l.id_num}</span>
                                     </div>
                                  </div>
@@ -154,8 +139,8 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                   </div>
                ) : (
                   <div className="py-24 text-center opacity-20 space-y-4">
-                     <i className="fas fa-barcode text-6xl"></i>
-                     <p className="text-[10px] font-black uppercase tracking-[0.4em]">Scan an order to add it to your manifest</p>
+                     <i className="fas fa-boxes-packing text-6xl"></i>
+                     <p className="text-[10px] font-black uppercase tracking-[0.4em]">Zero Active Loads Scanned</p>
                   </div>
                )}
             </Motion.div>
@@ -166,10 +151,10 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
               key="scan-view"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="space-y-8"
+              className="space-y-8 animate-in fade-in"
             >
                <button onClick={() => setView('list')} className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 hover:text-white transition">
-                  <i className="fas fa-arrow-left"></i> Manifest Ledger
+                  <i className="fas fa-arrow-left"></i> Return to Ledger
                </button>
 
                <section className="bg-white/5 border border-white/10 rounded-[56px] p-12 flex flex-col items-center text-center space-y-10 shadow-3xl">
@@ -178,26 +163,25 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                      <i className="fas fa-qrcode text-7xl text-slate-800 opacity-50"></i>
                   </div>
                   <div>
-                     <h3 className="text-2xl font-black uppercase tracking-widest italic">Awaiting Order Link</h3>
-                     <p className="text-xs text-slate-500 mt-3 max-w-[200px] mx-auto leading-relaxed">Enter the order identifier to claim the load for your shift.</p>
+                     <h3 className="text-2xl font-black uppercase tracking-widest italic">Awaiting Input</h3>
+                     <p className="text-xs text-slate-500 mt-3 max-w-[200px] mx-auto leading-relaxed">Position the parcel QR code within the frame or enter the ID manually.</p>
                   </div>
 
                   <div className="w-full space-y-6">
                      <input 
                         type="text" 
-                        placeholder="Terminal ID (e.g. 1024)" 
+                        placeholder="Manual Terminal ID (e.g. 1001)" 
                         className="w-full bg-white/5 border border-white/10 rounded-3xl px-8 py-5 text-center text-xl font-black outline-none focus:border-emerald-500 transition-all placeholder:text-white/5"
                         value={manualId}
                         onChange={e => setManualId(e.target.value)}
-                        autoFocus
                      />
                      <button 
                         onClick={handleScanSimulation}
                         disabled={isProcessing || !manualId}
                         className="w-full bg-emerald-600 text-white py-6 rounded-[32px] font-black text-xs uppercase tracking-[0.4em] shadow-2xl shadow-emerald-500/20 hover:bg-emerald-500 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-30"
                      >
-                        {isProcessing ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-link"></i>}
-                        {isProcessing ? 'Validating ID...' : 'Claim & Start Delivery'}
+                        {isProcessing ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-expand-arrows-alt"></i>}
+                        {isProcessing ? 'Processing Hash...' : 'Commit Identity'}
                      </button>
                   </div>
                </section>
@@ -223,20 +207,24 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                      <div>
                         <h3 className="text-4xl font-black tracking-tighter leading-none italic uppercase">{selectedLead.name}</h3>
                         <div className="flex items-center gap-3 mt-4">
-                           <span className="bg-slate-100 px-3 py-1 rounded-lg text-[9px] font-black uppercase text-slate-500">Target City: {selectedLead.city}</span>
+                           <span className="bg-slate-100 px-3 py-1 rounded-lg text-[9px] font-black uppercase text-slate-500">Sector: {selectedLead.city || 'Zone 1'}</span>
+                           <span className="w-1 h-1 rounded-full bg-slate-200"></span>
                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{selectedLead.createdAt.split(',')[0]}</span>
                         </div>
+                     </div>
+                     <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center text-3xl text-slate-200 shadow-inner">
+                        <i className="fas fa-box-open"></i>
                      </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-6">
                      <div className="flex gap-5 items-center p-5 bg-slate-50 rounded-[32px] border border-slate-100">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white shadow-lg"><i className="fas fa-map-pin text-sm"></i></div>
+                        <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white shadow-lg"><i className="fas fa-map-marked-alt text-sm"></i></div>
                         <div className="flex-1">
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Client Location</p>
-                           <p className="font-bold text-sm leading-tight uppercase text-slate-700">{selectedLead.city}</p>
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Digital Location</p>
+                           <p className="font-bold text-sm leading-tight uppercase text-slate-700">{selectedLead.city} {selectedLead.region || ''}</p>
                         </div>
-                        <button onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(selectedLead.city)}`, '_blank')} className="w-10 h-10 rounded-full bg-white text-emerald-500 shadow-sm border flex items-center justify-center hover:scale-110 transition"><i className="fas fa-location-arrow text-xs"></i></button>
+                        <button onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(selectedLead.city)}`, '_blank')} className="w-10 h-10 rounded-full bg-white text-emerald-500 shadow-sm border flex items-center justify-center"><i className="fas fa-location-arrow text-xs"></i></button>
                      </div>
                      
                      <div className="flex gap-5 items-center p-5 bg-emerald-50 rounded-[32px] border border-emerald-100">
@@ -245,15 +233,18 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Mobile Link</p>
                            <a href={`tel:${selectedLead.phone}`} className="font-black text-xl leading-none text-emerald-900 tracking-tight">{selectedLead.phone}</a>
                         </div>
-                        <button onClick={() => window.open(`https://wa.me/${selectedLead.phone.replace(/\s/g, '')}`, '_blank')} className="w-10 h-10 rounded-full bg-white text-emerald-500 shadow-sm border flex items-center justify-center hover:scale-110 transition"><i className="fab fa-whatsapp text-xs"></i></button>
+                        <div className="flex gap-2">
+                           <button onClick={() => window.open(`https://wa.me/${selectedLead.phone.replace(/\s/g, '')}`, '_blank')} className="w-10 h-10 rounded-full bg-white text-emerald-500 shadow-sm border flex items-center justify-center"><i className="fab fa-whatsapp text-xs"></i></button>
+                        </div>
                      </div>
                   </div>
 
                   {product && (
                      <div className="p-6 bg-slate-900 rounded-[40px] text-white flex items-center gap-6 shadow-2xl relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform"><i className="fas fa-tag text-5xl"></i></div>
                         <img src={product.photo} className="w-16 h-16 rounded-[24px] object-cover border-2 border-white/10" />
                         <div>
-                           <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.3em]">Artifact Information</p>
+                           <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.3em]">Artifact Specs</p>
                            <h4 className="font-black text-base uppercase leading-tight italic truncate max-w-[180px]">{product.title}</h4>
                            <div className="mt-2 text-2xl font-black text-emerald-400">{product.price.toFixed(2)} <span className="text-[10px] text-white/40">{product.currency}</span></div>
                         </div>
@@ -261,10 +252,10 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                   )}
 
                   <div className="space-y-4">
-                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Driver's Narrative / Notes</label>
+                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Dispatch Notes / Reports</label>
                      <textarea 
                         rows={3}
-                        placeholder="State any delivery feedback or issues..."
+                        placeholder="State any issues here (e.g. Recipient not at home...)"
                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-[32px] px-8 py-6 text-sm font-bold outline-none focus:border-emerald-500 transition-all resize-none"
                         value={orderNote}
                         onChange={e => setOrderNote(e.target.value)}
@@ -275,7 +266,7 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                      <button 
                         onClick={() => handleUpdateStatus(LeadStatus.DELIVERED)}
                         disabled={isProcessing}
-                        className="w-full bg-emerald-600 text-white py-6 rounded-[32px] font-black text-xs uppercase tracking-[0.4em] shadow-3xl hover:bg-emerald-500 transition-all active:scale-95 flex items-center justify-center gap-3"
+                        className="w-full bg-emerald-600 text-white py-6 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-3xl hover:bg-emerald-500 transition-all active:scale-95 flex items-center justify-center gap-3"
                      >
                         {isProcessing ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-check-circle"></i>}
                         Safi, T-liva
@@ -283,9 +274,16 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
                      <button 
                         onClick={() => handleUpdateStatus(LeadStatus.RETURNED)}
                         disabled={isProcessing}
-                        className="w-full bg-slate-100 text-slate-400 border-2 border-slate-100 py-6 rounded-[32px] font-black text-xs uppercase tracking-[0.4em] active:scale-95 transition-all hover:bg-red-50 hover:text-red-500"
+                        className="w-full bg-slate-100 text-slate-400 border-2 border-slate-100 py-6 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] active:scale-95 transition-all hover:bg-red-50 hover:text-red-500 hover:border-red-100"
                      >
                         Rj3at (Returned)
+                     </button>
+                     <button 
+                        onClick={() => handleUpdateStatus(LeadStatus.DELAYED)}
+                        disabled={isProcessing}
+                        className="w-full md:col-span-2 bg-white text-indigo-500 border-2 border-indigo-100 py-6 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] active:scale-95 transition-all hover:bg-indigo-50"
+                     >
+                        Chi Mouchkil (Report Issue)
                      </button>
                   </div>
                </section>
@@ -294,15 +292,15 @@ const LivreurTerminal: React.FC<LivreurTerminalProps> = ({ leads, setLeads, prod
         </AnimatePresence>
       </main>
 
-      {/* Floating Action: NEW SCAN */}
+      {/* Floating Action: New Scan Button */}
       {view === 'list' && (
          <div className="fixed bottom-10 left-0 w-full px-8 z-50 pointer-events-none">
             <button 
                onClick={handleNewScan}
                className="pointer-events-auto w-full bg-emerald-600 text-white py-6 rounded-[40px] font-black text-xs uppercase tracking-[0.4em] shadow-[0_25px_50px_-12px_rgba(16,185,129,0.5)] hover:bg-emerald-500 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4"
             >
-               <i className="fas fa-barcode-read text-lg"></i>
-               NEW SCAN (ASSIGN ORDER)
+               <i className="fas fa-qrcode text-lg animate-pulse"></i>
+               NEW SCAN (NEW ORDER)
             </button>
          </div>
       )}

@@ -122,20 +122,9 @@ const App: React.FC = () => {
   };
 
   const handleImpersonate = (targetUser: User) => {
-    if (!currentUser) return;
-    
-    // SECURITY RULES:
-    // 1. Admin can impersonate anyone.
-    // 2. Account Manager can impersonate Agent or Livreur.
-    const isAdmin = currentUser.role === UserRole.ADMIN;
-    const isManager = currentUser.role === UserRole.MANAGER;
-    const targetIsLower = targetUser.role === UserRole.AGENT || targetUser.role === UserRole.LIVREUR;
-
-    if (isAdmin || (isManager && targetIsLower)) {
+    if (currentUser?.role === UserRole.ADMIN) {
       setImpersonator(currentUser);
       setCurrentUser(targetUser);
-    } else {
-      alert("Unauthorized Access Attempt: Insufficient clearance level.");
     }
   };
 
