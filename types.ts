@@ -15,6 +15,9 @@ export enum LeadStatus {
   WRONG = 'wrong',
   EXPIRED = 'expired',
   PROCESSING = 'processing',
+  SHIPPED = 'shipped',
+  DELIVERED = 'delivered',
+  RETURNED = 'returned',
   DELAYED = 'delayed',
   CANCELLED_PRICE = 'cancelled price',
   BLACK_LISTED = 'Black listed'
@@ -22,18 +25,23 @@ export enum LeadStatus {
 
 export enum UserRole {
   ADMIN = 'Administrator',
-  AGENT = 'Sales Agent'
+  AGENT = 'Sales Agent (Call Center)',
+  LOGISTICS = 'Logistics Agent (Shipping)',
+  LIVREUR = 'Delivery Driver (Livreur)',
+  LEADER = 'Team Leader',
+  MANAGER = 'Account Manager',
+  CLIENT = 'Client (User)'
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string; // For authentication
+  password?: string;
   role: UserRole;
   avatar: string;
-  isActive: boolean; // Account status (Suspension)
-  isApproved: boolean; // Registration approval status
+  isActive: boolean;
+  isApproved: boolean;
   createdAt: string;
 }
 
@@ -90,15 +98,15 @@ export interface Discount {
   name: string;
   type: 'percentage' | 'fixed';
   value: number;
-  appliesTo: 'all' | string[]; // 'all' or array of product IDs
+  appliesTo: 'all' | string[];
   status: 'active' | 'scheduled' | 'expired';
   createdAt: string;
 }
 
 export interface ProductVariant {
   id: string;
-  name: string; // e.g., "Size" or "Color"
-  value: string; // e.g., "XL" or "Midnight Blue"
+  name: string;
+  value: string;
   sku: string;
   price: number;
   stock: number;
@@ -110,11 +118,11 @@ export interface Product {
   title: string;
   sku: string;
   price: number;
-  costPrice: number; // Unit acquisition cost
+  costPrice: number;
   backupPrice?: number;
-  stock: number; // Current remaining stock
-  purchasedStock: number; // Total units ever acquired
-  soldStock: number; // Total units confirmed/sold
+  stock: number;
+  purchasedStock: number;
+  soldStock: number;
   description: string;
   photo: string;
   allPhotos: string[];
@@ -122,12 +130,12 @@ export interface Product {
   currency: string;
   stockStatus: string;
   status: ProductStatus;
-  category: string; // Product category
-  upsellIds: string[]; // Linked products for "Frequently Bought Together"
+  category: string;
+  upsellIds: string[];
   discountType: 'none' | 'percentage' | 'fixed';
   discountValue: number;
-  confirmationRate: number; // Percentage
-  deliveryRate: number; // Percentage
+  confirmationRate: number;
+  deliveryRate: number;
   variants: ProductVariant[];
   createdAt: string;
   updatedAt: string;
@@ -136,7 +144,7 @@ export interface Product {
 export interface Lead {
   id: string;
   id_num: string;
-  name: string; // Composite: firstName + lastName
+  name: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -149,7 +157,7 @@ export interface Lead {
   product_id: string;
   status: LeadStatus;
   source?: 'Manual' | 'Storefront';
-  assignedTo?: string; // User ID
+  assignedTo?: string;
   createdAt: string;
   updatedAt: string;
 }

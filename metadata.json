@@ -1,5 +1,7 @@
 {
   "name": "Gwapashop Admin Pro",
   "description": "A high-end e-commerce management dashboard for store owners, featuring order tracking, inventory management, multi-store designing, and AI-powered product enhancements.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

@@ -22,14 +22,18 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
   const [payoutMethod, setPayoutMethod] = useState('Bank Transfer');
   const [payoutNote, setPayoutNote] = useState('');
 
-  // Financial Analysis Engine
+  // Financial Analysis Engine - Updated for Delivery Status
   const userFinancials = useMemo(() => {
     return users.map(user => {
-      const confirmedLeads = leads.filter(l => l.assignedTo === user.id && l.status === LeadStatus.CONFIRMED);
+      const successfulLeads = leads.filter(l => 
+        l.assignedTo === user.id && 
+        (l.status === LeadStatus.CONFIRMED || l.status === LeadStatus.SHIPPED || l.status === LeadStatus.DELIVERED)
+      );
       
-      const totalProfit = confirmedLeads.reduce((acc, lead) => {
+      const totalProfit = successfulLeads.reduce((acc, lead) => {
         const product = products.find(p => p.id === lead.product_id);
         if (!product) return acc;
+        // Logic: Commission or Profit only valid if confirmed+
         const margin = product.price - product.costPrice;
         return acc + margin;
       }, 0);
@@ -45,7 +49,7 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
         totalProfit,
         totalPaid,
         balance,
-        confirmedLeads,
+        successfulLeads,
         recentPayments: payments
           .filter(p => p.userId === user.id)
           .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -193,12 +197,6 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
                           </div>
                        </div>
                      ))}
-                     {fin.recentPayments.length === 0 && (
-                       <div className="py-10 text-center space-y-2 opacity-30">
-                          <i className="fas fa-receipt text-2xl"></i>
-                          <p className="text-[9px] font-bold uppercase tracking-widest">No disbursements yet</p>
-                       </div>
-                     )}
                   </div>
                </div>
             </div>
@@ -257,17 +255,6 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Internal Reference / Note</label>
-                  <textarea 
-                    className="w-full bg-slate-50 border-none rounded-3xl px-6 py-4 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-bold text-xs"
-                    placeholder="Reference # or reason..."
-                    rows={2}
-                    value={payoutNote}
-                    onChange={(e) => setPayoutNote(e.target.value)}
-                  />
-                </div>
-
                 <footer className="pt-6 flex gap-3">
                   <button type="button" onClick={() => setShowPayoutModal(false)} className="flex-1 py-4 text-[10px] font-black uppercase text-slate-400">Cancel</button>
                   <button type="submit" className="flex-[2] bg-indigo-600 text-white py-4 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl">Execute Transfer</button>
@@ -289,7 +276,7 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
                    <img src={detailedUser.user.avatar} className="w-16 h-16 rounded-[24px] shadow-lg border-4 border-white" />
                    <div>
                       <h3 className="text-3xl font-black text-slate-800 tracking-tighter italic leading-none">{detailedUser.user.name}</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Yield Source Breakdown & Performance Ledger</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Successful Flow Performance Ledger</p>
                    </div>
                 </div>
                 <button onClick={() => setShowDetailsModal(null)} className="w-12 h-12 rounded-full bg-white text-slate-400 hover:text-red-500 transition shadow-sm border border-slate-100 flex items-center justify-center"><i className="fas fa-times"></i></button>
@@ -302,13 +289,13 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
                        <p className="text-3xl font-black">{detailedUser.totalProfit.toLocaleString()} <span className="text-sm">SAR</span></p>
                     </div>
                     <div className="p-8 bg-emerald-500 rounded-[40px] text-white">
-                       <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-2">Confirmed Orders</p>
-                       <p className="text-3xl font-black">{detailedUser.confirmedLeads.length}</p>
+                       <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-2">Successful Flows</p>
+                       <p className="text-3xl font-black">{detailedUser.successfulLeads.length}</p>
                     </div>
                     <div className="p-8 bg-slate-100 rounded-[40px] text-slate-800 border border-slate-200">
-                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Average per Order</p>
+                       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Avg. Performance Yield</p>
                        <p className="text-3xl font-black">
-                         {detailedUser.confirmedLeads.length > 0 ? (detailedUser.totalProfit / detailedUser.confirmedLeads.length).toFixed(0) : 0} 
+                         {detailedUser.successfulLeads.length > 0 ? (detailedUser.totalProfit / detailedUser.successfulLeads.length).toFixed(0) : 0} 
                          <span className="text-sm ml-1 text-slate-400">SAR</span>
                        </p>
                     </div>
@@ -316,20 +303,20 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
 
                  <div className="space-y-6">
                     <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                       <i className="fas fa-list-check text-indigo-500"></i> Confirmed Lead Ledger
+                       <i className="fas fa-list-check text-indigo-500"></i> Personnel Flow Ledger
                     </h4>
                     <div className="bg-white rounded-[32px] border border-slate-100 overflow-hidden">
                        <table className="w-full text-left text-sm">
                           <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b">
                              <tr>
                                 <th className="px-8 py-5">Order ID</th>
-                                <th className="px-6 py-5">Product SKU</th>
-                                <th className="px-6 py-5">Customer</th>
+                                <th className="px-6 py-5">Product</th>
+                                <th className="px-6 py-5">Status</th>
                                 <th className="px-6 py-5 text-right">Yield</th>
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
-                             {detailedUser.confirmedLeads.map(lead => {
+                             {detailedUser.successfulLeads.map(lead => {
                                const product = products.find(p => p.id === lead.product_id);
                                const yieldVal = product ? (product.price - product.costPrice) : 0;
                                return (
@@ -340,8 +327,11 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
                                        <div className="text-[9px] font-bold text-slate-400">{product?.sku || '---'}</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                       <div className="text-[11px] font-black text-slate-800">{lead.name}</div>
-                                       <div className="text-[9px] font-bold text-slate-400">{lead.phone}</div>
+                                       <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                                          lead.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                                       }`}>
+                                          {lead.status}
+                                       </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                        <span className="text-[11px] font-black text-emerald-600">+{yieldVal} SAR</span>
@@ -349,18 +339,11 @@ const Invoices: React.FC<InvoicesProps> = ({ leads, products, users, payments, s
                                  </tr>
                                );
                              })}
-                             {detailedUser.confirmedLeads.length === 0 && (
-                               <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-300 font-black uppercase italic tracking-widest opacity-20">No revenue events registered</td></tr>
-                             )}
                           </tbody>
                        </table>
                     </div>
                  </div>
               </div>
-
-              <footer className="p-10 border-t bg-slate-50/50 flex justify-end">
-                 <button onClick={() => setShowDetailsModal(null)} className="px-10 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl">Acknowledge Ledger</button>
-              </footer>
             </Motion.div>
           </div>
         )}

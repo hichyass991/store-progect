@@ -23,6 +23,14 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
   const [viewMode, setViewMode] = useState<'inventory' | 'analytics'>('inventory');
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
+  const isFiltered = search !== '' || filterStatus !== 'All' || filterCategory !== 'All';
+
+  const resetFilters = () => {
+    setSearch('');
+    setFilterStatus('All');
+    setFilterCategory('All');
+  };
+
   const filtered = useMemo(() => {
     return products.filter(p => {
       const matchesSearch = p.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -82,7 +90,7 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Catalog Intelligence</h2>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Inventory Management & Performance Analytics</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button 
             onClick={handleExport}
             className="bg-white border-2 border-slate-100 text-slate-600 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:border-emerald-500 transition flex items-center gap-2"
@@ -145,48 +153,82 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
         </div>
       )}
 
-      <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="relative md:col-span-4">
-          <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
-          <input 
-            type="text" 
-            placeholder="Search by Title or SKU..." 
-            className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* Advanced Filter Bar */}
+      <div className="bg-white p-5 rounded-[32px] border border-slate-200 shadow-xl shadow-slate-200/40 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+          <div className="relative md:col-span-5">
+            <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 text-sm"></i>
+            <input 
+              type="text" 
+              placeholder="Search by Title, SKU or specific keyword..." 
+              className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent rounded-[20px] text-xs font-bold outline-none focus:border-emerald-500/30 focus:bg-white transition-all shadow-inner"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          
+          <div className="md:col-span-3">
+            <div className="relative group">
+              <i className="fas fa-tags absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+              <select 
+                className="w-full pl-12 pr-10 py-4 bg-slate-50 border-2 border-transparent rounded-[20px] text-[10px] font-black uppercase tracking-widest outline-none appearance-none cursor-pointer text-slate-600 focus:border-emerald-500/30 focus:bg-white transition-all"
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))}
+              </select>
+              <i className="fas fa-chevron-down absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none text-[10px]"></i>
+            </div>
+          </div>
+
+          <div className="md:col-span-3">
+            <div className="relative group">
+              <i className="fas fa-filter absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+              <select 
+                className="w-full pl-12 pr-10 py-4 bg-slate-50 border-2 border-transparent rounded-[20px] text-[10px] font-black uppercase tracking-widest outline-none appearance-none cursor-pointer text-slate-600 focus:border-emerald-500/30 focus:bg-white transition-all"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="All">All Statuses</option>
+                <option value={ProductStatus.ACTIVE}>Live Production</option>
+                <option value={ProductStatus.DRAFT}>Work in Progress</option>
+                <option value={ProductStatus.ARCHIVED}>System Archive</option>
+              </select>
+              <i className="fas fa-chevron-down absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none text-[10px]"></i>
+            </div>
+          </div>
+
+          <div className="md:col-span-1 flex justify-center">
+             <AnimatePresence>
+                {isFiltered && (
+                  <Motion.button 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    onClick={resetFilters}
+                    className="w-12 h-12 rounded-2xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center shadow-sm"
+                    title="Clear All Refinements"
+                  >
+                    <i className="fas fa-undo-alt text-xs"></i>
+                  </Motion.button>
+                )}
+             </AnimatePresence>
+          </div>
         </div>
         
-        <div className="md:col-span-3 flex items-center gap-3 bg-slate-50 px-4 rounded-2xl group border border-transparent focus-within:border-emerald-100 transition-all">
-          <i className="fas fa-tags text-slate-300 text-xs"></i>
-          <select 
-            className="flex-1 bg-transparent border-none py-3 text-xs font-bold outline-none appearance-none cursor-pointer text-slate-600"
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-          >
-            <option value="All">All Categories</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.name}>{cat.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="md:col-span-3 flex items-center gap-3 bg-slate-50 px-4 rounded-2xl group border border-transparent focus-within:border-emerald-100 transition-all">
-          <i className="fas fa-eye text-slate-300 text-xs"></i>
-          <select 
-            className="flex-1 bg-transparent border-none py-3 text-xs font-bold outline-none appearance-none cursor-pointer text-slate-600"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
-            <option value="All">All Statuses</option>
-            <option value={ProductStatus.ACTIVE}>Live Production</option>
-            <option value={ProductStatus.DRAFT}>Work in Progress</option>
-            <option value={ProductStatus.ARCHIVED}>System Archive</option>
-          </select>
-        </div>
-
-        <div className="md:col-span-2 flex items-center justify-end px-2 text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-          {filtered.length} Results
+        <div className="flex justify-between items-center px-2">
+           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Showing <span className="text-emerald-600">{filtered.length}</span> of <span className="text-slate-800">{products.length}</span> Artifacts
+           </div>
+           {isFiltered && (
+             <div className="flex gap-2">
+                {filterCategory !== 'All' && <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-tighter border border-emerald-100">{filterCategory}</span>}
+                {filterStatus !== 'All' && <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-tighter border border-indigo-100">{filterStatus}</span>}
+             </div>
+           )}
         </div>
       </div>
 

@@ -23,6 +23,8 @@ import Users from './views/Users';
 import Invoices from './views/Invoices';
 import SupportDesk from './views/SupportDesk';
 import AgentSupport from './views/AgentSupport';
+import CallCenter from './views/CallCenter';
+import LivreurTerminal from './views/LivreurTerminal';
 import { Product, Lead, AbandonedCart, Store, Category, Discount, Sheet, GoogleConfig, User, UserRole, Payment, SupportRequest, SupportReply } from './types';
 import { supabaseService } from './services/supabaseService';
 
@@ -64,13 +66,12 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => getSafeLocalStorage('gwapa_current_user', null));
   const [impersonator, setImpersonator] = useState<User | null>(() => getSafeLocalStorage('gwapa_impersonator', null));
   const [navOrder, setNavOrder] = useState<string[]>(() => getSafeLocalStorage('gwapa_nav_order', [
-    '/dashboard', '/leads', '/invoices', '/stores', '/products', '/sheets', '/users', '/settings', '/support'
+    '/dashboard', '/leads', '/call-center', '/logistics', '/invoices', '/stores', '/products', '/sheets', '/users', '/settings', '/support'
   ]));
 
   // --- SUPABASE HYDRATION EFFECT ---
   useEffect(() => {
     const hydrateFromCloud = async () => {
-      console.log("Synchronizing with Supabase Cloud Ecosystem...");
       try {
         const [cloudUsers, cloudLeads, cloudProducts, cloudCats, cloudDiscounts, cloudAbandoned, cloudSheets, cloudStores] = await Promise.all([
           supabaseService.getUsers(),
@@ -92,7 +93,7 @@ const App: React.FC = () => {
         if (cloudSheets.length) setSheets(cloudSheets);
         if (cloudStores.length) setStores(cloudStores);
       } catch (err) {
-        console.error("Hydration Interrupted. Operating in Local Persistence Mode.", err);
+        console.error("Hydration Error:", err);
       }
     };
     hydrateFromCloud();
@@ -116,14 +117,25 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setCurrentUser(null);
     setImpersonator(null);
-    localStorage.clear(); // Ensure clean slate on logout
+    localStorage.clear();
     window.location.reload();
   };
 
   const handleImpersonate = (targetUser: User) => {
-    if (currentUser?.role === UserRole.ADMIN) {
+    if (!currentUser) return;
+    
+    // SECURITY RULES:
+    // 1. Admin can impersonate anyone.
+    // 2. Account Manager can impersonate Agent or Livreur.
+    const isAdmin = currentUser.role === UserRole.ADMIN;
+    const isManager = currentUser.role === UserRole.MANAGER;
+    const targetIsLower = targetUser.role === UserRole.AGENT || targetUser.role === UserRole.LIVREUR;
+
+    if (isAdmin || (isManager && targetIsLower)) {
       setImpersonator(currentUser);
       setCurrentUser(targetUser);
+    } else {
+      alert("Unauthorized Access Attempt: Insufficient clearance level.");
     }
   };
 
@@ -142,7 +154,7 @@ const App: React.FC = () => {
       isActive: true,
       isApproved: false,
       createdAt: new Date().toLocaleDateString(),
-      role: UserRole.ADMIN
+      role: userData.role || UserRole.ADMIN
     };
     await supabaseService.syncUser(newUser);
     setUsers(prev => [...prev, newUser]);
@@ -158,6 +170,8 @@ const App: React.FC = () => {
         <Route element={currentUser ? <Layout currentUser={currentUser} impersonator={impersonator} onRestoreAdmin={handleRestoreAdmin} handleLogout={handleLogout} users={users} navOrder={navOrder} /> : <Navigate to="/login" replace />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard products={products} leads={leads} currentUser={currentUser!} />} />
+          <Route path="/call-center" element={<CallCenter leads={leads} setLeads={setLeads} products={products} currentUser={currentUser!} />} />
+          <Route path="/logistics" element={<LivreurTerminal leads={leads} setLeads={setLeads} products={products} currentUser={currentUser!} />} />
           <Route path="/sheets" element={<Sheets sheets={sheets} setSheets={setSheets} products={products} leads={leads} currentUser={currentUser!} />} />
           <Route path="/sheets/guide" element={<GoogleSetupGuide />} />
           <Route path="/leads" element={<Leads leads={leads} setLeads={setLeads} products={products} sheets={sheets} setSheets={setSheets} currentUser={currentUser!} />} />
