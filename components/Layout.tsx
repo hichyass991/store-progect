@@ -1,17 +1,23 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, UserRole } from '../types';
 
 const Motion = motion as any;
+
+interface SubItem {
+  path: string;
+  label: string;
+  icon: string;
+}
 
 interface NavItem {
   path: string;
   label: string;
   icon: string;
   roles: UserRole[];
-  children?: NavItem[];
+  subItems?: SubItem[];
 }
 
 interface LayoutProps {
@@ -23,98 +29,63 @@ interface LayoutProps {
   navOrder: string[];
 }
 
-const Layout: React.FC<LayoutProps> = ({ currentUser, impersonator, onRestoreAdmin, handleLogout, users, navOrder }) => {
+const Layout: React.FC<LayoutProps> = ({ currentUser, impersonator, onRestoreAdmin, handleLogout, navOrder }) => {
   const location = useLocation();
-  const navigate = useNavigate();
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    try {
-      const saved = localStorage.getItem('sidebar_width');
-      const parsed = saved ? parseInt(saved, 10) : 260;
-      return isNaN(parsed) ? 260 : parsed;
-    } catch (e) {
-      return 260;
-    }
-  });
-  
+  const [sidebarWidth, setSidebarWidth] = useState(280);
   const isCollapsed = sidebarWidth < 160;
-  const [isResizing, setIsResizing] = useState(false);
-  const [showUserSwitcher, setShowUserSwitcher] = useState(false);
-  const [expandedMenus, setExpandedMenus] = useState<string[]>(['/leads', '/products']);
-  const sidebarRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    localStorage.setItem('sidebar_width', sidebarWidth.toString());
-  }, [sidebarWidth]);
-
-  const startResizing = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', stopResizing);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    let newWidth = e.clientX;
-    if (newWidth < 160) {
-      newWidth = newWidth < 120 ? 80 : 160;
-    }
-    if (newWidth > 450) newWidth = 450;
-    setSidebarWidth(newWidth);
-  };
-
-  const stopResizing = () => {
-    setIsResizing(false);
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', stopResizing);
-    document.body.style.cursor = 'default';
-    document.body.style.userSelect = 'auto';
-  };
-
-  const toggleCollapse = () => {
-    setSidebarWidth(prev => prev < 160 ? 260 : 80);
-  };
-
-  const toggleMenu = (path: string) => {
-    setExpandedMenus(prev => 
-      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
-    );
-  };
-
-  const STAFF_ROLES = [UserRole.ADMIN, UserRole.AGENT, UserRole.LOGISTICS, UserRole.LEADER, UserRole.MANAGER];
-  const MGMT_AND_ACC = [UserRole.ADMIN, UserRole.MANAGER, UserRole.LEADER];
+  const toggleCollapse = () => setSidebarWidth(prev => prev < 160 ? 280 : 90);
 
   const navPool: Record<string, NavItem> = {
-    '/dashboard': { path: '/dashboard', label: 'Dashboard', icon: 'fa-th-large', roles: [...STAFF_ROLES, UserRole.CLIENT] },
-    '/call-center': { path: '/call-center', label: 'Call Terminal', icon: 'fa-headset', roles: [UserRole.ADMIN, UserRole.AGENT, UserRole.LEADER] },
-    '/logistics': { path: '/logistics', label: 'Livreur Hub', icon: 'fa-truck-loading', roles: [UserRole.ADMIN, UserRole.LIVREUR, UserRole.LOGISTICS] },
+    '/dashboard': { 
+      path: '/dashboard', label: 'Dashboard', icon: 'fa-th-large', 
+      roles: [UserRole.ADMIN, UserRole.AGENT] 
+    },
     '/leads': { 
-      path: '/leads', 
-      label: 'All Leads', 
-      icon: 'fa-address-book', 
-      roles: MGMT_AND_ACC,
-      children: [
-        { path: '/orders', label: 'Confirmed Orders', icon: 'fa-check-circle', roles: MGMT_AND_ACC },
-        { path: '/abandoned', label: 'Abandoned Carts', icon: 'fa-shopping-cart', roles: MGMT_AND_ACC },
+      path: '/leads', label: 'All Leads', icon: 'fa-address-book', 
+      roles: [UserRole.ADMIN, UserRole.AGENT],
+      subItems: [
+        { path: '/orders', label: 'Confirmed Orders', icon: 'fa-check-circle' },
+        { path: '/abandoned', label: 'Abandoned Carts', icon: 'fa-shopping-cart' }
       ]
     },
-    '/invoices': { path: '/invoices', label: 'Financial Ledger', icon: 'fa-file-contract', roles: [UserRole.ADMIN, UserRole.MANAGER] },
-    '/stores': { path: '/stores', label: 'My Stores', icon: 'fa-store', roles: [UserRole.ADMIN, UserRole.MANAGER] },
+    '/call-center': {
+      path: '/call-center', label: 'Call Terminal', icon: 'fa-headset',
+      roles: [UserRole.ADMIN, UserRole.AGENT]
+    },
+    '/logistics': {
+      path: '/logistics', label: 'Fleet Console', icon: 'fa-truck-fast',
+      roles: [UserRole.ADMIN, UserRole.AGENT]
+    },
+    '/invoices': { 
+      path: '/invoices', label: 'Financial Ledger', icon: 'fa-file-invoice-dollar', 
+      roles: [UserRole.ADMIN] 
+    },
     '/products': { 
-      path: '/products', 
-      label: 'All Products', 
-      icon: 'fa-box', 
-      roles: STAFF_ROLES,
-      children: [
-        { path: '/products/new', label: 'New Product', icon: 'fa-plus-square', roles: MGMT_AND_ACC },
-        { path: '/categories', label: 'Categories', icon: 'fa-tags', roles: MGMT_AND_ACC },
-        { path: '/discounts', label: 'Discounts', icon: 'fa-percent', roles: MGMT_AND_ACC },
+      path: '/products', label: 'All Products', icon: 'fa-box-archive', 
+      roles: [UserRole.ADMIN],
+      subItems: [
+        { path: '/products/new', label: 'New Product', icon: 'fa-plus-square' },
+        { path: '/categories', label: 'Categories', icon: 'fa-tags' },
+        { path: '/discounts', label: 'Discounts', icon: 'fa-percent' }
       ]
     },
-    '/sheets': { path: '/sheets', label: 'Source (Sheets)', icon: 'fa-file-invoice', roles: [UserRole.ADMIN] },
-    '/users': { path: '/users', label: 'Staff Ledger', icon: 'fa-users-cog', roles: [UserRole.ADMIN] },
-    '/support': { path: '/support', label: 'Support Desk', icon: 'fa-headset', roles: STAFF_ROLES },
-    '/settings': { path: '/settings', label: 'Settings', icon: 'fa-cog', roles: [UserRole.ADMIN] },
+    '/sheets': { 
+      path: '/sheets', label: 'Source (Sheets)', icon: 'fa-file-lines', 
+      roles: [UserRole.ADMIN] 
+    },
+    '/users': { 
+      path: '/users', label: 'Staff Ledger', icon: 'fa-users-gear', 
+      roles: [UserRole.ADMIN] 
+    },
+    '/settings': { 
+      path: '/settings', label: 'Settings', icon: 'fa-cog', 
+      roles: [UserRole.ADMIN] 
+    },
+    '/support': { 
+      path: '/support', label: 'Support Desk', icon: 'fa-headset', 
+      roles: [UserRole.ADMIN, UserRole.AGENT] 
+    },
   };
 
   const visibleNav = useMemo(() => {
@@ -123,130 +94,125 @@ const Layout: React.FC<LayoutProps> = ({ currentUser, impersonator, onRestoreAdm
       .filter(item => item && item.roles.includes(currentUser.role));
   }, [navOrder, currentUser.role]);
 
-  const renderNavLink = (item: NavItem, isChild = false) => {
-    const hasChildren = item.children && item.children.length > 0;
-    const isExpanded = expandedMenus.includes(item.path);
-    const isActive = location.pathname === item.path || (hasChildren && location.pathname.startsWith(item.path));
-
-    return (
-      <div key={item.path} className="w-full">
-        <div className="flex items-center group relative">
-          <NavLink
-            to={item.path}
-            className={({ isActive: linkActive }) => 
-              `flex-1 flex items-center relative overflow-hidden rounded-xl transition-all duration-200 py-3 ${
-                linkActive 
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
-                : isActive && hasChildren && !isCollapsed
-                  ? 'bg-indigo-50 text-indigo-600'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-              } ${isCollapsed ? 'justify-center h-12 w-12 mx-auto' : isChild ? 'pl-10 pr-4' : 'px-4'}`
-            }
-          >
-            <i className={`fas ${item.icon} transition-transform duration-200 group-hover:scale-110 ${isCollapsed ? 'text-lg' : 'w-5 text-center text-sm'}`}></i>
-            {!isCollapsed && (
-              <span className="text-[13px] ml-4 font-bold whitespace-nowrap">
-                {item.label}
-              </span>
-            )}
-          </NavLink>
-
-          {hasChildren && !isCollapsed && (
-            <button 
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleMenu(item.path); }}
-              className={`absolute right-2 p-2 text-[10px] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''} ${isActive ? 'text-indigo-600' : 'text-slate-300'}`}
-            >
-              <i className="fas fa-chevron-down"></i>
-            </button>
+  return (
+    <div className="flex h-screen overflow-hidden bg-[#fbfcfd] font-inter">
+      <Motion.aside 
+        animate={{ width: sidebarWidth }} 
+        className="bg-white border-r border-slate-100 flex flex-col z-50 relative"
+      >
+        <div className={`h-24 flex items-center px-8 ${isCollapsed ? 'justify-center' : 'gap-4'}`}>
+          <div className="bg-[#5d5cf6] w-10 h-10 rounded-xl text-white shadow-lg flex items-center justify-center">
+            <i className="fas fa-terminal text-sm"></i>
+          </div>
+          {!isCollapsed && (
+            <h1 className="font-syne font-black text-xl text-slate-800 tracking-tighter italic">
+              Gwapa<span className="text-[#5d5cf6]">.</span>Pro
+            </h1>
           )}
         </div>
 
-        {hasChildren && !isCollapsed && (
-          <AnimatePresence initial={false}>
-            {isExpanded && (
-              <Motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                className="overflow-hidden mt-1 space-y-1 relative"
-              >
-                <div className="absolute left-6 top-0 bottom-4 w-px bg-slate-100"></div>
-                {item.children!.filter(child => child.roles.includes(currentUser.role)).map(child => renderNavLink(child, true))}
-              </Motion.div>
-            )}
-          </AnimatePresence>
-        )}
-      </div>
-    );
-  };
+        <nav className="flex-1 overflow-y-auto px-4 py-8 space-y-1 no-scrollbar">
+          {visibleNav.map(item => {
+            const isParentActive = location.pathname.startsWith(item.path);
+            return (
+              <div key={item.path} className="space-y-1">
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) => 
+                    `flex items-center rounded-2xl transition-all duration-300 py-3.5 px-6 group relative ${
+                      isActive ? 'bg-[#5d5cf6] text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                    } ${isCollapsed ? 'justify-center px-0 h-12 w-12 mx-auto' : ''}`
+                  }
+                >
+                  <i className={`fas ${item.icon} ${isCollapsed ? 'text-lg' : 'w-5 text-center text-[13px]'}`}></i>
+                  {!isCollapsed && <span className="ml-4 text-[13px] font-bold tracking-tight">{item.label}</span>}
+                  {!isCollapsed && item.subItems && (
+                    <i className={`fas fa-chevron-right ml-auto text-[10px] opacity-40 transition-transform ${isParentActive ? 'rotate-90' : ''}`}></i>
+                  )}
+                </NavLink>
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 font-inter relative">
-      <AnimatePresence>
-        {!currentUser.isApproved && (
-          <Motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-slate-900/40 backdrop-blur-xl pointer-events-auto"
-          >
-            <Motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              className="bg-white/80 backdrop-blur-2xl border border-white p-12 rounded-[56px] shadow-[0_32px_64px_rgba(0,0,0,0.2)] max-w-xl w-full text-center space-y-10 relative overflow-hidden"
-            >
-              <header className="space-y-6">
-                 <div className="w-24 h-24 bg-amber-500/10 rounded-[32px] border-2 border-amber-500/20 flex items-center justify-center text-amber-500 text-4xl mx-auto shadow-2xl relative">
-                    <i className="fas fa-hourglass-half animate-pulse"></i>
-                 </div>
-                 <div>
-                    <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic leading-none">Security Clearance Pending</h2>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-4">Hello <span className="text-indigo-600 underline">{currentUser.name}</span>. Your workspace is currently in <span className="text-slate-800">Review Mode</span>.</p>
-                 </div>
-              </header>
-              <div className="space-y-8">
-                 <div className="bg-slate-900/5 p-8 rounded-[32px] border border-slate-900/5 space-y-4">
-                    <p className="text-[11px] font-medium text-slate-600 leading-relaxed italic">"Validation in progress. Please wait for Hicham or Amina to authorize your session."</p>
-                 </div>
-                 <button onClick={handleLogout} className="w-full py-5 bg-white border-2 border-slate-100 text-slate-500 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:text-red-500 transition-all">Terminate Session</button>
+                {!isCollapsed && item.subItems && isParentActive && (
+                  <div className="ml-6 pl-6 border-l border-slate-100 space-y-1 py-1">
+                    {item.subItems.map(sub => (
+                      <NavLink
+                        key={sub.path}
+                        to={sub.path}
+                        className={({ isActive }) => 
+                          `flex items-center py-2.5 px-4 rounded-xl text-[12px] font-semibold transition-all ${
+                            isActive ? 'text-[#5d5cf6] bg-indigo-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                          }`
+                        }
+                      >
+                        <i className={`fas ${sub.icon} w-5 text-center text-[11px] opacity-70`}></i>
+                        <span className="ml-3">{sub.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
               </div>
-            </Motion.div>
-          </Motion.div>
-        )}
-      </AnimatePresence>
+            );
+          })}
+        </nav>
 
-      <Motion.aside 
-        animate={{ width: sidebarWidth }}
-        className="bg-white border-r border-slate-200 flex flex-col z-50 relative group select-none shadow-[4px_0_24px_rgba(0,0,0,0.02)]"
-      >
-        <div onMouseDown={startResizing} className="absolute top-0 -right-1 w-2 h-full cursor-col-resize z-50 transition-colors duration-300 group-hover:bg-slate-100">
-           <button onClick={(e) => { e.stopPropagation(); toggleCollapse(); }} className="absolute top-24 -right-3 bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center text-[8px] text-slate-400 hover:text-indigo-600 shadow-md opacity-0 group-hover:opacity-100"><i className={`fas ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-left'}`}></i></button>
-        </div>
-        <div className={`h-20 border-b border-slate-100 flex items-center px-6 overflow-hidden flex-shrink-0 ${isCollapsed ? 'justify-center px-0' : 'gap-3'}`}>
-          <div className="bg-indigo-600 w-10 h-10 rounded-xl text-white shadow-lg flex items-center justify-center flex-shrink-0"><i className="fas fa-rocket text-sm"></i></div>
-          {!isCollapsed && <h1 className="font-black text-lg text-slate-800 tracking-tighter whitespace-nowrap">Gwapashop<span className="text-indigo-600">.</span></h1>}
-        </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1 no-scrollbar mt-4">{visibleNav.map(item => renderNavLink(item))}</nav>
-        <div className={`p-4 border-t border-slate-100 relative ${isCollapsed ? 'flex justify-center' : 'bg-slate-50/50'}`}>
-          <div onClick={() => setShowUserSwitcher(!showUserSwitcher)} className={`flex items-center cursor-pointer hover:bg-white/50 p-2 rounded-xl transition-colors ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 border border-indigo-200 shadow-sm flex items-center justify-center text-indigo-600 flex-shrink-0 overflow-hidden"><img src={currentUser.avatar} alt="Avatar" /></div>
-            {!isCollapsed && <div className="flex-1 min-w-0"><div className="text-[12px] font-black text-slate-800 truncate">{currentUser.name}</div><div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">{currentUser.role.split('(')[0]}</div></div>}
+        <div className="p-8 border-t border-slate-50">
+          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-4'}`}>
+            <div className="relative">
+              <img src={currentUser.avatar} className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm" />
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+            </div>
+            {!isCollapsed && (
+              <div className="min-w-0">
+                <div className="text-[12px] font-bold text-slate-800 truncate tracking-tight">{currentUser.name}</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{currentUser.role === UserRole.ADMIN ? 'Admin' : 'Agent'}</div>
+              </div>
+            )}
           </div>
+          {!isCollapsed && (
+            <button onClick={handleLogout} className="mt-8 w-full py-3.5 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-2xl text-[11px] font-bold uppercase tracking-widest transition-all">
+              Sign Out
+            </button>
+          )}
         </div>
       </Motion.aside>
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        <header className="h-20 bg-white border-b border-slate-100 px-8 flex justify-between items-center sticky top-0 z-40">
+        <AnimatePresence>
+          {impersonator && (
+            <Motion.div 
+              initial={{ y: -60 }} animate={{ y: 0 }} exit={{ y: -60 }} 
+              className="bg-slate-900 text-white px-8 py-3 flex justify-between items-center z-[100] shadow-2xl"
+            >
+               <div className="flex items-center gap-4">
+                  <span className="bg-emerald-500 text-slate-900 px-3 py-1 rounded-full text-[8px] font-black uppercase">Acting As User</span>
+                  <p className="text-[11px] font-medium opacity-80 italic">Accessing portal of <span className="font-black text-emerald-400">{currentUser.name}</span></p>
+               </div>
+               <button onClick={onRestoreAdmin} className="bg-white text-slate-900 px-6 py-1.5 rounded-full text-[10px] font-black uppercase hover:bg-emerald-500 hover:text-white transition">
+                 Restore Session
+               </button>
+            </Motion.div>
+          )}
+        </AnimatePresence>
+
+        <header className="h-20 bg-white border-b border-slate-100 px-10 flex justify-between items-center sticky top-0 z-40">
           <div className="flex items-center gap-4">
-            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">{currentUser.role.split('(')[0]} / {location.pathname.split('/').pop() || 'Terminal'}</h2>
+             <div className="w-1 h-5 bg-[#5d5cf6] rounded-full" />
+             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest">
+               {location.pathname.split('/').pop()?.replace('-', ' ') || 'Dashboard'}
+             </h2>
           </div>
           <div className="flex items-center gap-4">
-            <button className="w-10 h-10 rounded-xl text-slate-400 hover:bg-slate-50 transition-all flex items-center justify-center"><i className="far fa-bell"></i></button>
-            <button onClick={handleLogout} className="w-10 h-10 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all flex items-center justify-center"><i className="fas fa-sign-out-alt"></i></button>
+            <NavLink to="/" className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-emerald-500 transition-colors">
+              <i className="fas fa-external-link-alt mr-2"></i> View Store
+            </NavLink>
+            <button onClick={toggleCollapse} className="w-10 h-10 rounded-xl text-slate-300 hover:bg-slate-50 transition border border-slate-50 flex items-center justify-center">
+              <i className={`fas ${isCollapsed ? 'fa-indent' : 'fa-outdent'}`}></i>
+            </button>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto bg-slate-50/30 no-scrollbar"><Outlet /></div>
+
+        <div className="flex-1 overflow-y-auto no-scrollbar page-transition p-4 md:p-10">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

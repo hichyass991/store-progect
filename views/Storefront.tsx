@@ -1,9 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Product, Lead, LeadStatus, AbandonedCart, Sheet } from '../types';
 import { syncService } from '../services/syncService';
 import { supabaseService } from '../services/supabaseService';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const Motion = motion as any;
 
 interface StorefrontProps {
   products: Product[];
@@ -19,6 +22,9 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
   const product = products.find(p => p.id === productId);
 
   const [mainImg, setMainImg] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'specs' | 'reviews'>('details');
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  
   const [customer, setCustomer] = useState({ 
     firstName: '', 
     lastName: '', 
@@ -41,14 +47,23 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
   const totalPrice = useMemo(() => {
     if (!product) return 0;
     let total = product.price;
+    if (selectedVariant) {
+        const v = product.variants?.find(v => v.id === selectedVariant);
+        if (v) total = v.price;
+    }
     upsellProducts.forEach(up => {
       if (selectedUpsells.has(up.id)) total += up.price;
     });
     return total;
-  }, [product, upsellProducts, selectedUpsells]);
+  }, [product, upsellProducts, selectedUpsells, selectedVariant]);
 
   useEffect(() => {
-    if (product) setMainImg(product.photo);
+    if (product) {
+        setMainImg(product.photo);
+        if (product.variants && product.variants.length > 0) {
+            setSelectedVariant(product.variants[0].id);
+        }
+    }
   }, [product]);
 
   useEffect(() => {
@@ -62,10 +77,7 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
           product_id: productId!,
           timestamp: new Date().toLocaleString()
         };
-        
-        // Sync to Supabase
         await supabaseService.syncAbandonedCart(cart);
-
         setAbandonedCarts(prev => {
           const existingIdx = prev.findIndex(c => c.phone === customer.phone);
           if (existingIdx > -1) {
@@ -75,17 +87,16 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
           }
           return [cart, ...prev];
         });
-      }, 2000);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [customer, productId, setAbandonedCarts]);
 
   if (!product) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-white">
-        <h1 className="text-8xl font-black text-slate-100">404</h1>
-        <p className="text-slate-400 font-bold -mt-4 mb-8">Product Not Found</p>
-        <button onClick={() => navigate('/')} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold">Return to Dashboard</button>
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-slate-950 font-inter">
+        <h1 className="text-8xl font-black text-white/5 uppercase italic">Missing Node</h1>
+        <button onClick={() => navigate(-1)} className="mt-8 px-12 py-4 bg-emerald-600 text-white rounded-full font-black text-xs uppercase tracking-widest">Back to Hub</button>
       </div>
     );
   }
@@ -101,8 +112,8 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
 
   const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customer.firstName || !customer.lastName || !customer.phone || !customer.address || !customer.city) {
-      return alert("Please fill in all required delivery details.");
+    if (!customer.firstName || !customer.phone || !customer.city) {
+      return alert("Required: Name, Phone, and City.");
     }
 
     setIsSubmitting(true);
@@ -129,33 +140,21 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
       updatedAt: now
     };
 
-    // --- SUPABASE CLOUD SYNC ---
+    const variantLabel = product.variants?.find(v => v.id === selectedVariant)?.value || '';
+
     await supabaseService.syncLead(newLead, product, {
       address: customer.address,
       city: customer.city,
       zipCode: customer.zipCode,
       email: customer.email,
       totalAmount: totalPrice,
+      variant: variantLabel,
       upsells: Array.from(selectedUpsells)
     });
 
-    // --- GOOGLE SHEETS SYNC ---
     const targetSheet = sheets.find(s => s.productIds.includes(productId!) && s.googleSheetUrl);
     if (targetSheet && targetSheet.googleSheetUrl) {
-      const result = await syncService.pushLead(targetSheet.googleSheetUrl, newLead, product);
-      const log = {
-        id: 'log_' + Math.random().toString(36).substr(2, 5),
-        timestamp: now,
-        entityName: newLead.name,
-        status: result.success ? 'success' as const : 'failure' as const,
-        message: result.message
-      };
-      const updatedSheets = sheets.map(s => s.id === targetSheet.id ? { ...s, syncLogs: [log, ...(s.syncLogs || [])].slice(0, 10) } : s);
-      setSheets(updatedSheets);
-      
-      // Update sheet metadata (logs) in Supabase
-      const sheetToSync = updatedSheets.find(s => s.id === targetSheet.id);
-      if (sheetToSync) await supabaseService.syncSheet(sheetToSync);
+      await syncService.pushLead(targetSheet.googleSheetUrl, newLead, product);
     }
     
     setLeads(prev => [newLead, ...prev]);
@@ -166,205 +165,297 @@ const Storefront: React.FC<StorefrontProps> = ({ products, setLeads, setAbandone
 
   if (isOrdered) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center p-8 bg-emerald-50">
-        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-4xl mb-6 animate-bounce">
+      <div className="min-h-screen flex flex-col items-center justify-center text-center p-8 bg-white font-inter">
+        <Motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-32 h-32 bg-emerald-100 text-emerald-600 rounded-[48px] flex items-center justify-center text-5xl mb-12 shadow-2xl shadow-emerald-200"
+        >
           <i className="fas fa-check"></i>
-        </div>
-        <h2 className="text-4xl font-black text-slate-800 mb-2">Order Confirmed!</h2>
-        <p className="text-slate-500 max-w-md mb-8">Thank you for your purchase. Your order is being processed and will be shipped to {customer.city} shortly.</p>
-        <button onClick={() => setIsOrdered(false)} className="px-12 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-xl hover:scale-105 transition">Done</button>
+        </Motion.div>
+        <h2 className="text-6xl font-black text-slate-900 mb-6 tracking-tighter uppercase italic">Dispatch Locked.</h2>
+        <p className="text-slate-400 max-w-md mb-12 font-medium text-lg leading-relaxed">System identity confirmed. Dispatching to <span className="text-slate-900 font-black">{customer.city}</span>. Payment via COD upon delivery cycle.</p>
+        <button onClick={() => navigate(-1)} className="px-20 py-6 bg-slate-900 text-white rounded-full font-black text-xs uppercase tracking-[0.4em] shadow-3xl hover:scale-105 transition-all">Proceed to Terminal</button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-inter">
-      <div className="max-w-6xl mx-auto">
-        <nav className="flex items-center justify-between mb-10 py-4 border-b">
-          <div className="flex items-center gap-2 text-emerald-600 font-black text-2xl tracking-tighter">
-            <i className="fas fa-shopping-bag"></i> GWAPASHOP.
-          </div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-4 py-1.5 rounded-full shadow-sm border">
-            Official Secure Store
-          </div>
-        </nav>
+    <div className="min-h-screen bg-white font-inter text-slate-900 selection:bg-emerald-500 selection:text-white">
+      {/* Product Detail Nav */}
+      <nav className="h-20 bg-white/80 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-[100] flex items-center justify-between px-8 md:px-16 shadow-sm">
+        <div className="flex items-center gap-4">
+           <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition">
+              <i className="fas fa-arrow-left"></i>
+           </button>
+           <h4 className="hidden md:block font-black text-xs uppercase tracking-widest text-slate-400">{product.category} / {product.sku}</h4>
+        </div>
+        <div className="flex items-center gap-8">
+           <div className="hidden lg:flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Protocol Active</span>
+           </div>
+           <button className="bg-slate-900 text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-xl">Order Now</button>
+        </div>
+      </nav>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-          {/* Gallery */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="aspect-square bg-white rounded-[40px] overflow-hidden border border-slate-200 shadow-sm relative">
-              <img src={mainImg} alt="" className="w-full h-full object-cover transition-all duration-700" />
-              {product.discountType !== 'none' && (
-                <div className="absolute top-6 left-6 bg-emerald-600 text-white px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">
-                  {product.discountValue}{product.discountType === 'percentage' ? '%' : ' ' + product.currency} OFF
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-5 gap-3">
-              {product.allPhotos.map((src, i) => (
-                <img 
-                  key={i} src={src} alt="" 
-                  onClick={() => setMainImg(src)}
-                  className={`aspect-square rounded-2xl border-2 object-cover cursor-pointer transition ${mainImg === src ? 'border-emerald-500 scale-95' : 'border-transparent hover:border-slate-200'}`} 
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Details & Form */}
-          <div className="lg:col-span-5 flex flex-col space-y-8">
-            <div>
-              <span className="text-[10px] font-black text-emerald-600 tracking-[0.2em] uppercase bg-emerald-50 px-4 py-2 rounded-full inline-block mb-4">
-                {product.category}
-              </span>
-              <h1 className="text-4xl font-black text-slate-900 leading-[1] tracking-tighter mb-4">{product.title}</h1>
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-black text-emerald-600">{product.price.toFixed(2)}</span>
-                <span className="text-lg font-bold text-slate-400">{product.currency}</span>
-              </div>
-            </div>
-
-            {/* Upsell Section */}
-            {upsellProducts.length > 0 && (
-              <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                   <i className="fas fa-layer-group text-indigo-500"></i> Frequently Bought Together
-                </h4>
-                <div className="space-y-3">
-                  {upsellProducts.map(up => (
-                    <div 
-                      key={up.id} 
-                      onClick={() => toggleUpsell(up.id)}
-                      className={`flex items-center justify-between p-3 rounded-2xl border-2 transition-all cursor-pointer ${
-                        selectedUpsells.has(up.id) ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent hover:border-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl overflow-hidden border bg-white">
-                          <img src={up.photo} className="w-full h-full object-cover" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black uppercase text-slate-800">{up.title}</p>
-                          <p className="text-[9px] font-bold text-emerald-600">+{up.price} {up.currency}</p>
-                        </div>
-                      </div>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] transition ${
-                        selectedUpsells.has(up.id) ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-400'
-                      }`}>
-                        <i className="fas fa-check"></i>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+      <main className="max-w-7xl mx-auto p-8 md:p-16 grid grid-cols-1 lg:grid-cols-12 gap-20">
+        {/* Left: Product Architecture (Images) */}
+        <div className="lg:col-span-7 space-y-10">
+          <div className="aspect-square bg-slate-50 rounded-[64px] overflow-hidden border border-slate-100 shadow-sm relative group">
+            <Motion.img 
+              key={mainImg}
+              initial={{ opacity: 0, scale: 1.1 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8 }}
+              src={mainImg} 
+              className="w-full h-full object-cover" 
+            />
+            {product.discountType !== 'none' && (
+              <div className="absolute top-10 left-10 bg-emerald-600 text-white px-8 py-3 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl">
+                -{product.discountValue}{product.discountType === 'percentage' ? '%' : ' ' + product.currency} Performance Credit
               </div>
             )}
+          </div>
+          
+          <div className="grid grid-cols-5 gap-4">
+            {product.allPhotos.map((src, i) => (
+              <div 
+                key={i} 
+                onClick={() => setMainImg(src)}
+                className={`aspect-square rounded-[32px] border-4 overflow-hidden cursor-pointer transition-all duration-500 hover:scale-105 ${mainImg === src ? 'border-emerald-500 shadow-xl' : 'border-white shadow-sm'}`}
+              >
+                <img src={src} className="w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
 
-            <div className="bg-white p-8 rounded-[40px] border-2 border-emerald-500 shadow-2xl shadow-emerald-100 space-y-6 relative overflow-hidden">
-              <h3 className="text-xl font-black text-slate-800 tracking-tight">Express Checkout</h3>
-              
-              <form onSubmit={handleOrder} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">First Name</label>
+          <div className="pt-16 border-t border-slate-100 space-y-12">
+             <div className="flex gap-12 border-b border-slate-100 pb-6">
+                {['details', 'specs', 'reviews'].map(t => (
+                  <button 
+                    key={t}
+                    onClick={() => setActiveTab(t as any)}
+                    className={`text-[11px] font-black uppercase tracking-[0.4em] transition-all relative pb-4 ${activeTab === t ? 'text-slate-900' : 'text-slate-300'}`}
+                  >
+                    {t}
+                    {activeTab === t && <Motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 w-full h-1 bg-emerald-500 rounded-full" />}
+                  </button>
+                ))}
+             </div>
+
+             <AnimatePresence mode="wait">
+                {activeTab === 'details' && (
+                  <Motion.div 
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                    className="space-y-8"
+                  >
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Artifact Dossier</h3>
+                    <p className="text-xl font-medium text-slate-600 leading-relaxed italic">{product.description}</p>
+                  </Motion.div>
+                )}
+                {activeTab === 'specs' && (
+                  <Motion.div 
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                    className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                  >
+                    {[
+                      { l: "Platform", v: "High Frequency Tech" },
+                      { l: "Unit SKU", v: product.sku },
+                      { l: "Class", v: product.category },
+                      { l: "Build", v: "Industrial Alloy" },
+                      { l: "Cycle", v: "24-Month Protocol" },
+                      { l: "Origin", v: "Global Distribution" }
+                    ].map((s, i) => (
+                      <div key={i} className="flex justify-between items-center p-8 bg-slate-50 rounded-[32px] border border-slate-100 group hover:border-emerald-200 transition-colors">
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{s.l}</span>
+                         <span className="text-xs font-black text-slate-900 uppercase italic">{s.v}</span>
+                      </div>
+                    ))}
+                  </Motion.div>
+                )}
+                {activeTab === 'reviews' && (
+                   <Motion.div 
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                    className="space-y-6"
+                  >
+                    {[
+                      { n: "Ismail M.", r: "Exceptional fidelity and the packaging was military-grade.", s: 5 },
+                      { n: "Laila J.", r: "Best gadget in my daily stack. Fast delivery cycle.", s: 5 }
+                    ].map((r, i) => (
+                      <div key={i} className="p-10 bg-slate-50 rounded-[40px] border border-slate-100 space-y-4">
+                         <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-black uppercase text-slate-900">{r.n}</span>
+                            <div className="flex gap-1 text-[8px] text-emerald-500">
+                               {[...Array(r.s)].map((_, j) => <i key={j} className="fas fa-star"></i>)}
+                            </div>
+                         </div>
+                         <p className="text-slate-500 font-medium italic">"{r.r}"</p>
+                      </div>
+                    ))}
+                  </Motion.div>
+                )}
+             </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Right: Pricing & Deployment (Checkout) */}
+        <div className="lg:col-span-5 space-y-12">
+          <header className="space-y-6">
+            <div className="flex items-center gap-4">
+               <span className="bg-emerald-50 text-emerald-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">{product.category}</span>
+               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Archive Reference {product.sku}</span>
+            </div>
+            <h1 className="text-6xl font-black text-slate-900 leading-[0.9] tracking-tighter uppercase italic">{product.title}</h1>
+            <div className="flex items-baseline gap-4 pt-4">
+               <span className="text-6xl font-black text-slate-900">{product.price.toFixed(2)}</span>
+               <span className="text-2xl font-bold text-slate-400 uppercase">{product.currency}</span>
+            </div>
+          </header>
+
+          {/* Configuration Matrix (Variants) */}
+          {product.variants && product.variants.length > 0 && (
+            <section className="space-y-6">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Configuration Matrix</h4>
+              <div className="grid grid-cols-2 gap-3">
+                 {product.variants.map(v => (
+                   <button 
+                    key={v.id}
+                    onClick={() => setSelectedVariant(v.id)}
+                    className={`p-6 rounded-[32px] border-2 transition-all flex flex-col items-start gap-2 text-left ${selectedVariant === v.id ? 'border-emerald-600 bg-emerald-50 shadow-xl' : 'border-slate-100 bg-white hover:border-slate-300'}`}
+                   >
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${selectedVariant === v.id ? 'text-emerald-700' : 'text-slate-400'}`}>{v.name}</span>
+                      <span className="text-sm font-black text-slate-800">{v.value}</span>
+                      <span className="text-[10px] font-bold text-emerald-600 mt-2">{v.price} {product.currency}</span>
+                   </button>
+                 ))}
+              </div>
+            </section>
+          )}
+
+          {/* Upsell Cluster */}
+          {upsellProducts.length > 0 && (
+             <section className="bg-slate-50 p-10 rounded-[48px] border border-slate-100 space-y-8">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] flex items-center gap-3">
+                   <div className="w-2 h-2 rounded-full bg-indigo-500"></div> Component Synergy
+                </h4>
+                <div className="space-y-4">
+                   {upsellProducts.map(up => (
+                     <div 
+                      key={up.id} 
+                      onClick={() => toggleUpsell(up.id)}
+                      className={`flex items-center justify-between p-5 rounded-[32px] border-2 transition-all cursor-pointer group ${selectedUpsells.has(up.id) ? 'bg-white border-indigo-600 shadow-xl' : 'bg-white/50 border-transparent hover:border-slate-300'}`}
+                     >
+                        <div className="flex items-center gap-5">
+                           <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 bg-white shadow-sm group-hover:scale-105 transition-transform">
+                              <img src={up.photo} className="w-full h-full object-cover" />
+                           </div>
+                           <div>
+                              <p className="text-[11px] font-black uppercase text-slate-800">{up.title}</p>
+                              <p className="text-[10px] font-bold text-indigo-600 mt-1">+{up.price} {up.currency}</p>
+                           </div>
+                        </div>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs transition-all ${selectedUpsells.has(up.id) ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
+                           <i className="fas fa-plus"></i>
+                        </div>
+                     </div>
+                   ))}
+                </div>
+             </section>
+          )}
+
+          {/* Order Terminal (Express Checkout) */}
+          <section className="bg-slate-900 p-12 rounded-[64px] shadow-[0_60px_100px_-20px_rgba(0,0,0,0.3)] space-y-12 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-12 opacity-5 group-hover:scale-110 transition-transform duration-1000">
+              <i className="fas fa-microchip text-[12rem] text-emerald-500"></i>
+            </div>
+            
+            <div className="relative z-10 text-center">
+              <h3 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">Fast Deployment Order</h3>
+              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em] mt-4">Direct Dispatch & Cash On Arrival Protocol</p>
+            </div>
+            
+            <form onSubmit={handleOrder} className="space-y-6 relative z-10">
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-4">Consignee First</label>
                     <input 
-                      type="text" required placeholder="John" 
-                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                      type="text" required placeholder="Hicham" 
+                      className="w-full bg-white/5 border border-white/10 focus:border-emerald-500 p-5 rounded-[24px] outline-none transition font-black text-sm text-white placeholder:text-white/10"
                       value={customer.firstName}
                       onChange={(e) => setCustomer(prev => ({ ...prev, firstName: e.target.value }))}
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Last Name</label>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-4">Consignee Last</label>
                     <input 
-                      type="text" required placeholder="Doe" 
-                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
+                      type="text" required placeholder="Idali" 
+                      className="w-full bg-white/5 border border-white/10 focus:border-emerald-500 p-5 rounded-[24px] outline-none transition font-black text-sm text-white placeholder:text-white/10"
                       value={customer.lastName}
                       onChange={(e) => setCustomer(prev => ({ ...prev, lastName: e.target.value }))}
                     />
                   </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Email Address (Optional)</label>
-                  <input 
-                    type="email" placeholder="john@example.com" 
-                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
-                    value={customer.email}
-                    onChange={(e) => setCustomer(prev => ({ ...prev, email: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Phone Number</label>
-                  <input 
-                    type="tel" required placeholder="06XXXXXXXX" 
-                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-bold text-sm"
-                    value={customer.phone}
-                    onChange={(e) => setCustomer(prev => ({ ...prev, phone: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Street Address</label>
-                  <input 
-                    type="text" required placeholder="Street Name, Building No." 
-                    className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
-                    value={customer.address}
-                    onChange={(e) => setCustomer(prev => ({ ...prev, address: e.target.value }))}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">City</label>
-                    <input 
-                      type="text" required placeholder="Casablanca" 
-                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
-                      value={customer.city}
-                      onChange={(e) => setCustomer(prev => ({ ...prev, city: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Zip Code</label>
-                    <input 
-                      type="text" placeholder="20000" 
-                      className="w-full bg-slate-50 border-2 border-transparent focus:border-emerald-500 p-3 rounded-xl outline-none transition font-medium text-sm"
-                      value={customer.zipCode}
-                      onChange={(e) => setCustomer(prev => ({ ...prev, zipCode: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4">
-                  <div className="flex justify-between items-center mb-4 px-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Order Total:</span>
-                    <span className="text-2xl font-black text-emerald-600">{totalPrice.toFixed(2)} {product.currency}</span>
-                  </div>
-                  <button 
-                    type="submit" 
-                    disabled={isSubmitting}
-                    className="w-full bg-emerald-600 text-white py-5 rounded-2xl font-black text-lg shadow-2xl shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-                  >
-                    {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : 'PLACE COD ORDER'}
-                  </button>
-                </div>
-              </form>
-              <div className="flex items-center justify-center gap-4 text-emerald-600/50">
-                <i className="fas fa-shield-alt"></i>
-                <span className="text-[10px] font-black uppercase tracking-widest">Secure Cash On Delivery</span>
               </div>
-            </div>
 
-            <div className="prose prose-slate max-w-none">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full border-2 border-slate-100 flex items-center justify-center"><i className="fas fa-info text-[6px]"></i></div>
-                Product Details
-              </h4>
-              <p className="text-slate-600 text-sm leading-relaxed">{product.description}</p>
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-4">Deployment Phone (Secure Link)</label>
+                <input 
+                  type="tel" required placeholder="06 XX XX XX XX" 
+                  className="w-full bg-white/5 border border-white/10 focus:border-emerald-500 p-5 rounded-[24px] outline-none transition font-black text-sm text-white placeholder:text-white/10"
+                  value={customer.phone}
+                  onChange={(e) => setCustomer(prev => ({ ...prev, phone: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-4">Deployment City</label>
+                <input 
+                  type="text" required placeholder="Casablanca / Sector 1" 
+                  className="w-full bg-white/5 border border-white/10 focus:border-emerald-500 p-5 rounded-[24px] outline-none transition font-black text-sm text-white placeholder:text-white/10"
+                  value={customer.city}
+                  onChange={(e) => setCustomer(prev => ({ ...prev, city: e.target.value }))}
+                />
+              </div>
+
+              <div className="pt-8 border-t border-white/5">
+                <div className="flex justify-between items-center mb-10 px-4">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Net Commitment:</span>
+                  <span className="text-5xl font-black text-emerald-400 tracking-tighter">{totalPrice.toFixed(2)} <span className="text-xs">{product.currency}</span></span>
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="w-full bg-emerald-600 text-white py-8 rounded-[32px] font-black text-sm uppercase tracking-[0.4em] shadow-[0_20px_50px_rgba(16,185,129,0.3)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-4"
+                >
+                  {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : <><i className="fas fa-rocket text-sm"></i> EXECUTE ORDER PROTOCOL</>}
+                </button>
+              </div>
+            </form>
+            
+            <div className="flex items-center justify-center gap-4 text-emerald-500/30 relative z-10 pt-4">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span className="text-[9px] font-black uppercase tracking-[0.4em]">End-to-End Encryption Terminal</span>
             </div>
+          </section>
+
+          {/* Fast Ops Indicators */}
+          <div className="grid grid-cols-3 gap-6">
+             {[
+               { i: "fa-truck-fast", t: "Fast Ops", d: "Next Cycle" },
+               { i: "fa-shield-halved", t: "Grade A", d: "Validated" },
+               { i: "fa-lock", t: "Secure", d: "Encrypted" }
+             ].map((item, idx) => (
+               <div key={idx} className="p-8 bg-slate-50 rounded-[40px] border border-slate-100 flex flex-col items-center text-center gap-4 shadow-sm group hover:border-emerald-200 transition-colors">
+                  <i className={`fas ${item.i} text-slate-900 text-xl group-hover:scale-110 transition-transform`}></i>
+                  <div>
+                     <p className="text-[10px] font-black uppercase text-slate-900 tracking-widest leading-none">{item.t}</p>
+                     <p className="text-[8px] font-bold uppercase text-slate-400 tracking-widest mt-2">{item.d}</p>
+                  </div>
+               </div>
+             ))}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

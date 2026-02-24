@@ -327,11 +327,11 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                          onClick={() => navigate(`/products/view/${p.id}`)}
-                          title="Detailed Intelligence"
-                          className="w-10 h-10 rounded-xl bg-white text-indigo-600 shadow-sm border border-indigo-100 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all"
+                          onClick={() => setQuickViewProduct(p)}
+                          title="Quick Intelligence"
+                          className="w-10 h-10 rounded-xl bg-white text-emerald-600 shadow-sm border border-emerald-100 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all"
                         >
-                          <i className="fas fa-microchip text-xs"></i>
+                          <i className="fas fa-eye text-xs"></i>
                         </button>
                         <button 
                           onClick={() => window.open(`#/store/${p.id}`, '_blank')}
@@ -349,7 +349,7 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
                           onClick={() => deleteProduct(p.id)}
                           className="w-10 h-10 rounded-xl hover:bg-white text-slate-300 hover:text-red-500 transition-all flex items-center justify-center border border-transparent hover:border-red-100"
                         >
-                          <i className="fas fa-trash-alt text-xs"></i>
+                          <i className="fas fa-trash text-xs"></i>
                         </button>
                       </div>
                     </td>
@@ -395,24 +395,37 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
               initial={{ scale: 0.9, opacity: 0, y: 20 }} 
               animate={{ scale: 1, opacity: 1, y: 0 }} 
               exit={{ scale: 0.9, opacity: 0, y: 20 }} 
-              className="relative bg-white w-full max-w-5xl rounded-[48px] shadow-3xl overflow-hidden my-auto flex flex-col md:flex-row h-[85vh] md:h-auto max-h-[90vh]"
+              className="relative bg-white w-full max-w-6xl rounded-[48px] shadow-3xl overflow-hidden my-auto flex flex-col md:flex-row h-[85vh] md:h-auto max-h-[90vh]"
             >
               {/* Image Section */}
-              <div className="w-full md:w-1/2 bg-slate-50 relative group">
-                <img 
-                  src={quickViewProduct.photo} 
-                  alt={quickViewProduct.title} 
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-transparent pointer-events-none" />
-                <div className="absolute bottom-10 left-10 text-white">
-                  <span className="text-[9px] font-black uppercase tracking-[0.3em] bg-emerald-600 px-4 py-2 rounded-full shadow-2xl mb-4 inline-block">Visual Verification</span>
-                  <h3 className="text-4xl font-black tracking-tighter uppercase italic drop-shadow-lg">{quickViewProduct.title}</h3>
+              <div className="w-full md:w-1/2 bg-slate-50 relative group flex flex-col">
+                <div className="flex-1 relative overflow-hidden">
+                   <img 
+                    src={quickViewProduct.photo} 
+                    alt={quickViewProduct.title} 
+                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                   />
+                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent pointer-events-none" />
+                   <div className="absolute bottom-10 left-10 text-white pr-10">
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] bg-emerald-600 px-4 py-2 rounded-full shadow-2xl mb-4 inline-block">Visual Verification</span>
+                    <h3 className="text-4xl font-black tracking-tighter uppercase italic drop-shadow-lg">{quickViewProduct.title}</h3>
+                   </div>
                 </div>
+                
+                {/* Secondary Photos Strip */}
+                {quickViewProduct.allPhotos && quickViewProduct.allPhotos.length > 1 && (
+                  <div className="p-4 bg-white border-t flex gap-2 overflow-x-auto no-scrollbar">
+                    {quickViewProduct.allPhotos.map((img, i) => (
+                      <div key={i} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-slate-100 flex-shrink-0 cursor-pointer hover:border-emerald-500 transition-colors">
+                        <img src={img} className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Data Section */}
-              <div className="w-full md:w-1/2 p-12 flex flex-col space-y-8 overflow-y-auto no-scrollbar">
+              <div className="w-full md:w-1/2 p-12 flex flex-col space-y-8 overflow-y-auto no-scrollbar bg-white">
                 <header className="flex justify-between items-start">
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Identifier: {quickViewProduct.sku}</p>
@@ -445,18 +458,42 @@ const Products: React.FC<ProductsProps> = ({ products, setProducts, currentUser,
                 <div className="space-y-4">
                   <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 flex justify-between">
                     <span>Artifact Narrative</span>
-                    <i className="fas fa-feather-pointed"></i>
+                    <i className="fas fa-feather-pointed text-emerald-500"></i>
                   </h4>
-                  <p className="text-xs font-medium text-slate-600 leading-relaxed italic">
+                  <p className="text-xs font-medium text-slate-600 leading-relaxed italic line-clamp-4">
                     {quickViewProduct.description || "The strategic narrative for this artifact is currently being finalized."}
                   </p>
                 </div>
 
+                {/* Variant Grid */}
+                {quickViewProduct.variants && quickViewProduct.variants.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Variation Configuration</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                       {quickViewProduct.variants.map(v => (
+                         <div key={v.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-white text-[10px]">
+                            <div className="flex items-center gap-3">
+                               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-black text-indigo-600 border border-slate-100 uppercase">{v.value.substring(0,1)}</div>
+                               <div>
+                                  <div className="font-black text-slate-800">{v.name}: {v.value}</div>
+                                  <div className="text-[8px] font-bold text-slate-400 font-mono">{v.sku}</div>
+                               </div>
+                            </div>
+                            <div className="text-right">
+                               <div className="font-black text-emerald-600">{v.price} {quickViewProduct.currency}</div>
+                               <div className="text-[8px] font-bold text-slate-300">{v.stock} in stock</div>
+                            </div>
+                         </div>
+                       ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4 pt-4 border-t border-slate-50">
                   <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                    <span className="text-slate-400">Inventory Status</span>
+                    <span className="text-slate-400">Inventory Lifecycle</span>
                     <span className={quickViewProduct.purchasedStock - quickViewProduct.soldStock < 5 ? 'text-red-500' : 'text-emerald-600'}>
-                      {quickViewProduct.purchasedStock - quickViewProduct.soldStock} Units In Stock
+                      {quickViewProduct.purchasedStock - quickViewProduct.soldStock} / {quickViewProduct.purchasedStock} Units
                     </span>
                   </div>
                   <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">

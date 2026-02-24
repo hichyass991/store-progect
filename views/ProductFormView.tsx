@@ -20,7 +20,7 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
   const { id } = useParams();
   const isEdit = !!id;
 
-  const [activeTab, setActiveTab] = useState<'basic' | 'inventory' | 'marketing'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'inventory' | 'variants' | 'marketing'>('basic');
   const [upsellSearch, setUpsellSearch] = useState('');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
 
@@ -29,7 +29,6 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
     sku: '',
     price: 0,
     costPrice: 0,
-    backupPrice: 0,
     stock: 0,
     purchasedStock: 0,
     soldStock: 0,
@@ -37,7 +36,6 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
     photo: '',
     allPhotos: [],
     currency: defaultCurrency,
-    stockStatus: 'In Stock',
     status: ProductStatus.DRAFT,
     category: '',
     upsellIds: [],
@@ -245,17 +243,18 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
           </button>
         </div>
 
-        <div className="flex bg-slate-50/80 p-1.5 rounded-[24px] border border-slate-100">
+        <div className="flex bg-slate-50/80 p-1.5 rounded-[24px] border border-slate-100 overflow-x-auto no-scrollbar">
           {[
             { id: 'basic', label: 'Identity & Narrative', icon: 'fa-fingerprint' },
-            { id: 'inventory', label: 'Stock & Intelligence', icon: 'fa-vault' },
+            { id: 'inventory', label: 'Financials', icon: 'fa-vault' },
+            { id: 'variants', label: 'Variations', icon: 'fa-layer-group' },
             { id: 'marketing', label: 'Marketing Engine', icon: 'fa-rocket' }
           ].map(tab => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex-1 flex items-center justify-center gap-3 py-4 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all ${
+              className={`flex-1 flex items-center justify-center gap-3 py-4 px-6 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all whitespace-nowrap ${
                 activeTab === tab.id ? 'bg-white text-emerald-600 shadow-lg' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
@@ -274,7 +273,7 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
                     <i className="fas fa-camera text-emerald-500"></i> Artifact Visuals (Max 5)
                   </h4>
                 </div>
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   {formData.allPhotos?.map((p, idx) => {
                     const isMain = p === formData.photo;
                     return (
@@ -356,6 +355,93 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
             </div>
           )}
 
+          {activeTab === 'variants' && (
+            <div className="space-y-10 animate-in fade-in slide-in-from-bottom duration-500">
+               <div className="flex justify-between items-center px-4">
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Variant Matrix</h4>
+                    <p className="text-[8px] font-bold text-slate-300 uppercase mt-1">Configure size, color, or custom variations</p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={addVariant}
+                    className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2"
+                  >
+                    <i className="fas fa-plus"></i> Add Variant
+                  </button>
+               </div>
+
+               <div className="space-y-4">
+                  {formData.variants && formData.variants.length > 0 ? (
+                    formData.variants.map((v) => (
+                      <div key={v.id} className="bg-slate-50 p-8 rounded-[40px] border border-white shadow-sm flex flex-col md:flex-row gap-6 items-start md:items-center group">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 flex-1 w-full">
+                           <div className="space-y-2">
+                              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-2">Type (e.g. Size)</label>
+                              <input 
+                                type="text" 
+                                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-xs font-black outline-none focus:border-emerald-500"
+                                value={v.name}
+                                onChange={(e) => updateVariant(v.id, 'name', e.target.value)}
+                              />
+                           </div>
+                           <div className="space-y-2">
+                              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-2">Value (e.g. XL)</label>
+                              <input 
+                                type="text" 
+                                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-xs font-black outline-none focus:border-emerald-500"
+                                value={v.value}
+                                onChange={(e) => updateVariant(v.id, 'value', e.target.value)}
+                              />
+                           </div>
+                           <div className="space-y-2">
+                              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-2">Variant SKU</label>
+                              <input 
+                                type="text" 
+                                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-xs font-mono font-black outline-none focus:border-emerald-500"
+                                value={v.sku}
+                                onChange={(e) => updateVariant(v.id, 'sku', e.target.value)}
+                              />
+                           </div>
+                           <div className="space-y-2">
+                              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-2">Price</label>
+                              <input 
+                                type="number" 
+                                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-xs font-black outline-none focus:border-emerald-500 text-emerald-600"
+                                value={v.price}
+                                onChange={(e) => updateVariant(v.id, 'price', parseFloat(e.target.value))}
+                              />
+                           </div>
+                           <div className="space-y-2">
+                              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-2">Stock</label>
+                              <input 
+                                type="number" 
+                                className="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-xs font-black outline-none focus:border-emerald-500"
+                                value={v.stock}
+                                onChange={(e) => updateVariant(v.id, 'stock', parseInt(e.target.value))}
+                              />
+                           </div>
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => removeVariant(v.id)}
+                          className="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm flex-shrink-0"
+                        >
+                          <i className="fas fa-trash-alt"></i>
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-20 bg-slate-50 rounded-[48px] border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-center opacity-40">
+                       <i className="fas fa-layer-group text-4xl mb-4"></i>
+                       <p className="text-[10px] font-black uppercase tracking-widest">No variations defined for this product</p>
+                       <button type="button" onClick={addVariant} className="mt-4 text-[9px] font-black text-indigo-600 underline uppercase tracking-widest">Create First Variant</button>
+                    </div>
+                  )}
+               </div>
+            </div>
+          )}
+
           {activeTab === 'marketing' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom duration-500">
                <div className="bg-slate-50 p-10 rounded-[48px] space-y-8 border border-white">
@@ -365,6 +451,24 @@ const ProductFormView: React.FC<ProductFormViewProps> = ({ products, setProducts
                       <button key={cat} type="button" onClick={() => setFormData(prev => ({ ...prev, category: cat }))} className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${formData.category === cat ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white text-slate-400 hover:bg-slate-100'}`}>{cat}</button>
                     ))}
                   </div>
+                </div>
+
+                <div className="bg-slate-50 p-10 rounded-[48px] space-y-8 border border-white">
+                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-4">Campaign Strategy</h4>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="space-y-3">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Discount Type</label>
+                         <select className="w-full bg-white border border-slate-100 rounded-2xl px-6 py-4 font-black outline-none appearance-none cursor-pointer" value={formData.discountType} onChange={e => setFormData({...formData, discountType: e.target.value})}>
+                            <option value="none">Standard MSRP</option>
+                            <option value="percentage">Percentage Markdown</option>
+                            <option value="fixed">Fixed Currency Reduction</option>
+                         </select>
+                      </div>
+                      <div className="space-y-3">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Reduction Value</label>
+                         <input type="number" className="w-full bg-white border border-slate-100 rounded-2xl px-6 py-4 font-black outline-none focus:border-indigo-500 transition-all" value={formData.discountValue} onChange={e => setFormData({...formData, discountValue: parseFloat(e.target.value)})} />
+                      </div>
+                   </div>
                 </div>
             </div>
           )}

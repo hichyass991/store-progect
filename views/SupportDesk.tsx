@@ -19,14 +19,20 @@ const SupportDesk: React.FC<SupportDeskProps> = ({ supportRequests, setSupportRe
   const [selectedReq, setSelectedReq] = useState<SupportRequest | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
 
-  if (currentUser.role !== UserRole.ADMIN) {
-    return <div className="p-20 text-center font-black text-slate-400 uppercase tracking-widest">Restricted Access</div>;
-  }
-
+  // Hooks must be called before any conditional returns
   const filtered = useMemo(() => {
     if (filter === 'all') return supportRequests;
     return supportRequests.filter(r => r.status === filter);
   }, [supportRequests, filter]);
+
+  const activeReq = useMemo(() => {
+    if (!selectedReq) return null;
+    return supportRequests.find(r => r.id === selectedReq.id) || selectedReq;
+  }, [selectedReq, supportRequests]);
+
+  if (currentUser.role !== UserRole.ADMIN) {
+    return <div className="p-20 text-center font-black text-slate-400 uppercase tracking-widest">Restricted Access</div>;
+  }
 
   const toggleStatus = (id: string) => {
     setSupportRequests(prev => prev.map(r => 
@@ -47,14 +53,7 @@ const SupportDesk: React.FC<SupportDeskProps> = ({ supportRequests, setSupportRe
     if (!selectedReq || !replyMessage.trim()) return;
     onReply(selectedReq.id, replyMessage);
     setReplyMessage('');
-    // The selection will update automatically because supportRequests prop updates
   };
-
-  // We need to find the latest version of the selected request in the array to show new replies
-  const activeReq = useMemo(() => {
-    if (!selectedReq) return null;
-    return supportRequests.find(r => r.id === selectedReq.id) || selectedReq;
-  }, [selectedReq, supportRequests]);
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500 pb-32">
@@ -162,14 +161,12 @@ const SupportDesk: React.FC<SupportDeskProps> = ({ supportRequests, setSupportRe
                    </header>
 
                    <div className="flex-1 space-y-8 overflow-y-auto no-scrollbar pr-2">
-                      {/* User's Original Message */}
                       <div className="p-8 bg-slate-50 rounded-[32px] border border-white">
                         <p className="text-lg font-medium text-slate-600 leading-relaxed italic">
                           "{activeReq.message}"
                         </p>
                       </div>
 
-                      {/* Visual Evidence Render */}
                       {activeReq.attachments && activeReq.attachments.length > 0 && (
                         <div className="space-y-4">
                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -192,7 +189,6 @@ const SupportDesk: React.FC<SupportDeskProps> = ({ supportRequests, setSupportRe
                         </div>
                       )}
 
-                      {/* Administrative Replies Flow */}
                       {activeReq.replies && activeReq.replies.length > 0 && (
                         <div className="space-y-6 pt-6 border-t">
                            <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Administrative Response Feed</h4>
@@ -224,7 +220,6 @@ const SupportDesk: React.FC<SupportDeskProps> = ({ supportRequests, setSupportRe
                       )}
                    </div>
 
-                   {/* Reply Input Area */}
                    <footer className="pt-8 border-t space-y-6">
                       <form onSubmit={handleSendReply} className="space-y-4">
                          <div className="relative">
@@ -240,7 +235,6 @@ const SupportDesk: React.FC<SupportDeskProps> = ({ supportRequests, setSupportRe
                                   type="button"
                                   onClick={() => window.location.href = `mailto:${activeReq.userEmail}?subject=Re: ${activeReq.subject}`}
                                   className="w-10 h-10 rounded-full bg-white text-slate-400 hover:text-indigo-600 shadow-sm border border-slate-100 flex items-center justify-center transition"
-                                  title="External Email Client"
                                >
                                   <i className="fas fa-external-link-alt text-xs"></i>
                                </button>
@@ -254,14 +248,6 @@ const SupportDesk: React.FC<SupportDeskProps> = ({ supportRequests, setSupportRe
                             </div>
                          </div>
                       </form>
-                      <div className="flex gap-4">
-                         <button 
-                          onClick={() => navigate('/users')}
-                          className="flex-1 bg-white border-2 border-slate-100 text-slate-500 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:border-indigo-100 transition shadow-sm"
-                        >
-                           Back to Ledger
-                        </button>
-                      </div>
                    </footer>
                 </Motion.div>
               ) : (

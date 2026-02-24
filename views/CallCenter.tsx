@@ -16,7 +16,8 @@ interface CallCenterProps {
 const CallCenter: React.FC<CallCenterProps> = ({ leads, setLeads, products, currentUser }) => {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<LeadStatus | 'all'>('new');
+  // Fix: Use LeadStatus.NEW instead of string 'new'
+  const [filter, setFilter] = useState<LeadStatus | 'all'>(LeadStatus.NEW);
   const [isShipping, setIsShipping] = useState(false);
 
   const selectedLead = useMemo(() => leads.find(l => l.id === selectedLeadId), [selectedLeadId, leads]);

@@ -36,15 +36,15 @@ const Settings: React.FC<SettingsProps> = ({ config, setConfig, currentUser, nav
     setExpandedSection(expandedSection === section ? null : section);
   };
 
-  // Only labels for TOP-LEVEL menu items (Folders or single pages)
+  // Matched labels with the Screenshot
   const navItemLabels: Record<string, { label: string, icon: string }> = {
-    '/dashboard': { label: 'Dashboard (Main)', icon: 'fa-th-large' },
-    '/leads': { label: 'All Leads (Folder)', icon: 'fa-address-book' },
-    '/invoices': { label: 'Financial Ledger', icon: 'fa-file-contract' },
+    '/dashboard': { label: 'Dashboard', icon: 'fa-th-large' },
+    '/leads': { label: 'All Leads', icon: 'fa-address-book' },
+    '/invoices': { label: 'Financial Ledger', icon: 'fa-file-invoice-dollar' },
     '/stores': { label: 'My Stores', icon: 'fa-store' },
-    '/products': { label: 'All Products (Folder)', icon: 'fa-box' },
-    '/sheets': { label: 'Source (Sheets)', icon: 'fa-file-invoice' },
-    '/users': { label: 'Staff Management', icon: 'fa-users-cog' },
+    '/products': { label: 'All Products', icon: 'fa-box-archive' },
+    '/sheets': { label: 'Source (Sheets)', icon: 'fa-file-lines' },
+    '/users': { label: 'Staff Ledger', icon: 'fa-users-gear' },
     '/support': { label: 'Support Desk', icon: 'fa-headset' },
     '/settings': { label: 'Settings', icon: 'fa-cog' },
   };
@@ -113,7 +113,6 @@ const Settings: React.FC<SettingsProps> = ({ config, setConfig, currentUser, nav
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">This setting becomes the default for all new artifacts in the catalog.</p>
                 </div>
               </Motion.div>
             )}
@@ -245,18 +244,6 @@ const Settings: React.FC<SettingsProps> = ({ config, setConfig, currentUser, nav
               </Motion.div>
             )}
           </AnimatePresence>
-        </div>
-      </div>
-
-      <div className="bg-slate-900 p-10 rounded-[48px] text-white flex items-center gap-10">
-        <div className="w-20 h-20 bg-indigo-500/20 rounded-3xl flex items-center justify-center text-3xl">
-          <i className="fas fa-terminal"></i>
-        </div>
-        <div>
-          <h4 className="text-xl font-black italic">Advanced Manifest</h4>
-          <p className="text-xs text-slate-400 font-medium leading-relaxed mt-2">
-            These global settings redefine how your workspace behaves. Reordering sections here will immediately reflect in your main sidebar navigation.
-          </p>
         </div>
       </div>
     </div>

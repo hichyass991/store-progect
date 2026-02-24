@@ -10,8 +10,6 @@ import Abandoned from './views/Abandoned';
 import Products from './views/Products';
 import ProductFormView from './views/ProductFormView';
 import ProductDetailView from './views/ProductDetailView';
-import Stores from './views/Stores';
-import StoreDesigner from './views/StoreDesigner';
 import Storefront from './views/Storefront';
 import StoreHome from './views/StoreHome';
 import Categories from './views/Categories';
@@ -25,7 +23,7 @@ import SupportDesk from './views/SupportDesk';
 import AgentSupport from './views/AgentSupport';
 import CallCenter from './views/CallCenter';
 import LivreurTerminal from './views/LivreurTerminal';
-import { Product, Lead, AbandonedCart, Store, Category, Discount, Sheet, GoogleConfig, User, UserRole, Payment, SupportRequest, SupportReply } from './types';
+import { Product, Lead, AbandonedCart, Category, Discount, Sheet, GoogleConfig, User, UserRole, Payment, SupportRequest } from './types';
 import { supabaseService } from './services/supabaseService';
 
 const App: React.FC = () => {
@@ -53,7 +51,6 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => getSafeLocalStorage('gwapa_products', []));
   const [leads, setLeads] = useState<Lead[]>(() => getSafeLocalStorage('gwapa_leads', []));
   const [abandonedCarts, setAbandonedCarts] = useState<AbandonedCart[]>(() => getSafeLocalStorage('gwapa_abandoned', []));
-  const [stores, setStores] = useState<Store[]>(() => getSafeLocalStorage('gwapa_stores', []));
   const [sheets, setSheets] = useState<Sheet[]>(() => getSafeLocalStorage('gwapa_sheets', []));
   const [discounts, setDiscounts] = useState<Discount[]>(() => getSafeLocalStorage('gwapa_discounts', []));
   const [googleConfig, setGoogleConfig] = useState<GoogleConfig>(() => getSafeLocalStorage('gwapa_google_config', { clientId: '', clientSecret: '' }));
@@ -66,22 +63,20 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => getSafeLocalStorage('gwapa_current_user', null));
   const [impersonator, setImpersonator] = useState<User | null>(() => getSafeLocalStorage('gwapa_impersonator', null));
   const [navOrder, setNavOrder] = useState<string[]>(() => getSafeLocalStorage('gwapa_nav_order', [
-    '/dashboard', '/leads', '/call-center', '/logistics', '/invoices', '/stores', '/products', '/sheets', '/users', '/settings', '/support'
+    '/dashboard', '/leads', '/call-center', '/logistics', '/invoices', '/products', '/sheets', '/users', '/settings', '/support'
   ]));
 
-  // --- SUPABASE HYDRATION EFFECT ---
   useEffect(() => {
     const hydrateFromCloud = async () => {
       try {
-        const [cloudUsers, cloudLeads, cloudProducts, cloudCats, cloudDiscounts, cloudAbandoned, cloudSheets, cloudStores] = await Promise.all([
+        const [cloudUsers, cloudLeads, cloudProducts, cloudCats, cloudDiscounts, cloudAbandoned, cloudSheets] = await Promise.all([
           supabaseService.getUsers(),
           supabaseService.getLeads(),
           supabaseService.getProducts(),
           supabaseService.getCategories(),
           supabaseService.getDiscounts(),
           supabaseService.getAbandonedCarts(),
-          supabaseService.getSheets(),
-          supabaseService.getStores()
+          supabaseService.getSheets()
         ]);
 
         if (cloudUsers.length) setUsers(cloudUsers);
@@ -91,7 +86,6 @@ const App: React.FC = () => {
         if (cloudDiscounts.length) setDiscounts(cloudDiscounts);
         if (cloudAbandoned.length) setAbandonedCarts(cloudAbandoned);
         if (cloudSheets.length) setSheets(cloudSheets);
-        if (cloudStores.length) setStores(cloudStores);
       } catch (err) {
         console.error("Hydration Error:", err);
       }
@@ -102,7 +96,6 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('gwapa_products', JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem('gwapa_leads', JSON.stringify(leads)); }, [leads]);
   useEffect(() => { localStorage.setItem('gwapa_abandoned', JSON.stringify(abandonedCarts)); }, [abandonedCarts]);
-  useEffect(() => { localStorage.setItem('gwapa_stores', JSON.stringify(stores)); }, [stores]);
   useEffect(() => { localStorage.setItem('gwapa_sheets', JSON.stringify(sheets)); }, [sheets]);
   useEffect(() => { localStorage.setItem('gwapa_categories', JSON.stringify(categories)); }, [categories]);
   useEffect(() => { localStorage.setItem('gwapa_discounts', JSON.stringify(discounts)); }, [discounts]);
@@ -153,11 +146,11 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <Routes>
+        <Route path="/" element={<StoreHome products={products} />} />
+        <Route path="/product/:productId" element={<Storefront products={products} setLeads={setLeads} setAbandonedCarts={setAbandonedCarts} sheets={sheets} setSheets={setSheets} />} />
         <Route path="/login" element={currentUser ? <Navigate to="/dashboard" replace /> : <Login users={users} setCurrentUser={setCurrentUser} onSendSupportRequest={() => {}} onRegister={handleRegister} />} />
-        <Route path="/store/:productId" element={<Storefront products={products} setLeads={setLeads} setAbandonedCarts={setAbandonedCarts} sheets={sheets} setSheets={setSheets} />} />
-        <Route path="/s/:storeId" element={<StoreHome stores={stores} products={products} />} />
+        
         <Route element={currentUser ? <Layout currentUser={currentUser} impersonator={impersonator} onRestoreAdmin={handleRestoreAdmin} handleLogout={handleLogout} users={users} navOrder={navOrder} /> : <Navigate to="/login" replace />}>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard products={products} leads={leads} currentUser={currentUser!} />} />
           <Route path="/call-center" element={<CallCenter leads={leads} setLeads={setLeads} products={products} currentUser={currentUser!} />} />
           <Route path="/logistics" element={<LivreurTerminal leads={leads} setLeads={setLeads} products={products} currentUser={currentUser!} />} />
@@ -173,8 +166,6 @@ const App: React.FC = () => {
           <Route path="/products/view/:id" element={<ProductDetailView products={products} currentUser={currentUser!} />} />
           <Route path="/categories" element={<Categories categories={categories} setCategories={setCategories} currentUser={currentUser!} />} />
           <Route path="/discounts" element={<Discounts discounts={discounts} setDiscounts={setDiscounts} products={products} currentUser={currentUser!} />} />
-          <Route path="/stores" element={<Stores stores={stores} setStores={setStores} currentUser={currentUser!} />} />
-          <Route path="/stores/design/:id" element={<StoreDesigner stores={stores} setStores={setStores} products={products} currentUser={currentUser!} />} />
           <Route path="/settings" element={<Settings config={googleConfig} setConfig={setGoogleConfig} currentUser={currentUser!} navOrder={navOrder} setNavOrder={setNavOrder} currency={globalCurrency} setCurrency={setGlobalCurrency} />} />
           <Route path="/users" element={<Users users={users} setUsers={setUsers} currentUser={currentUser!} onImpersonate={handleImpersonate} />} />
           <Route path="/support" element={<AgentSupport supportRequests={supportRequests} onSendRequest={() => {}} currentUser={currentUser!} />} />
